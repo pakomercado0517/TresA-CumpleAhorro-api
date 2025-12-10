@@ -1,0 +1,464 @@
+---
+alwaysApply: true
+---
+
+# Contexto del Proyecto - Tanda Cumpleañera Backend
+
+> **Última actualización**: 2024  
+> **Estado**: Configuración inicial completada - Desarrollo en progreso
+
+---
+
+## 📋 Descripción del Proyecto
+
+**Tanda Cumpleañera** es una API REST para gestionar grupos de ahorro rotativo enfocados en cumpleaños. El sistema permite a los usuarios crear grupos, agregar miembros, generar eventos de cumpleaños anuales y registrar pagos con comprobantes.
+
+### Objetivo Principal
+
+Construir una API segura y robusta que gestione usuarios, grupos, miembros, eventos de cumpleaños y pagos. Debe exponer endpoints REST limpios, validados, autenticados y preparados para escalar.
+
+### Concepto de Negocio
+
+- Los usuarios crean **grupos** con un monto fijo por cumpleaños
+- Cada grupo tiene **miembros** con fechas de cumpleaños
+- Se generan **eventos de cumpleaños** anuales para cada miembro
+- Los miembros realizan **pagos** para cada evento
+- El monto esperado = número de miembros × monto fijo del grupo
+
+---
+
+## 🛠️ Stack Tecnológico
+
+### Core
+
+- **Runtime**: Node.js
+- **Framework**: Express 5.2.1
+- **Lenguaje**: TypeScript 5.9.3 (strict mode)
+- **ORM**: Sequelize con sequelize-typescript
+- **Base de Datos**: PostgreSQL 8.16.3
+
+### Seguridad y Autenticación
+
+- **JWT**: Para autenticación de usuarios
+- **bcrypt**: Para hash de contraseñas (pendiente instalar)
+- **express-validator**: Para validación de datos
+- **CORS**: Configurado para frontend
+
+### Desarrollo y Calidad
+
+- **ESLint**: Linting con reglas estrictas
+- **Prettier**: Formateo automático de código
+- **nodemon**: Hot reload en desarrollo
+- **ts-node**: Ejecución directa de TypeScript
+
+### Utilidades
+
+- **morgan**: Logging de requests HTTP
+- **dotenv**: Gestión de variables de entorno
+- **Cloudinary SDK**: (Opcional) Para almacenamiento de comprobantes
+
+### Package Manager
+
+- **pnpm**: Gestor de paquetes del proyecto
+
+---
+
+## 📁 Estructura del Proyecto
+
+### Estructura Actual
+
+```
+backend/
+├── src/
+│   ├── index.ts          # Punto de entrada de la aplicación
+│   └── server.ts         # Configuración de Express
+├── dist/                 # Código compilado (generado)
+├── node_modules/         # Dependencias
+├── .eslintrc.json        # Configuración ESLint
+├── .eslintignore         # Archivos ignorados por ESLint
+├── .prettierrc           # Configuración Prettier
+├── .prettierignore       # Archivos ignorados por Prettier
+├── .editorconfig         # Configuración del editor
+├── tsconfig.json         # Configuración TypeScript
+├── package.json          # Dependencias y scripts
+├── pnpm-lock.yaml        # Lock file de pnpm
+├── PRD.md                # Documento de requerimientos
+├── PROJECT_RULES.md      # Reglas y convenciones del proyecto
+└── PROJECT_CONTEXT.md    # Este archivo
+```
+
+### Estructura Planificada
+
+```
+src/
+├── controllers/          # Lógica de request/response
+│   ├── auth.controller.ts
+│   ├── group.controller.ts
+│   ├── member.controller.ts
+│   ├── event.controller.ts
+│   └── payment.controller.ts
+├── services/             # Lógica de negocio
+│   ├── auth.service.ts
+│   ├── group.service.ts
+│   ├── member.service.ts
+│   ├── event.service.ts
+│   └── payment.service.ts
+├── models/               # Modelos de Sequelize
+│   ├── User.ts
+│   ├── Group.ts
+│   ├── Member.ts
+│   ├── BirthdayEvent.ts
+│   └── Payment.ts
+├── middlewares/          # Middlewares reutilizables
+│   ├── auth.middleware.ts
+│   ├── error.middleware.ts
+│   ├── validation.middleware.ts
+│   └── rate-limit.middleware.ts
+├── routes/               # Definición de rutas
+│   ├── auth.routes.ts
+│   ├── group.routes.ts
+│   ├── member.routes.ts
+│   ├── event.routes.ts
+│   └── payment.routes.ts
+├── validators/           # Validaciones con express-validator o Zod
+│   ├── auth.validator.ts
+│   ├── group.validator.ts
+│   └── ...
+├── utils/                # Funciones auxiliares
+│   ├── jwt.util.ts
+│   ├── bcrypt.util.ts
+│   └── logger.util.ts
+├── types/                # Tipos TypeScript compartidos
+│   ├── express.d.ts
+│   └── common.types.ts
+├── config/               # Configuraciones
+│   ├── database.config.ts
+│   ├── env.config.ts
+│   └── sequelize.config.ts
+├── migrations/           # Migraciones de Sequelize (pendiente)
+├── seeds/                # Seeds de datos (pendiente)
+├── index.ts              # Punto de entrada
+└── server.ts             # Configuración de Express
+```
+
+---
+
+## 🗄️ Modelos de Base de Datos
+
+### User
+
+- `id` (PK, auto-increment)
+- `name` (string, required)
+- `email` (string, unique, required)
+- `passwordHash` (string, required)
+- `createdAt` (timestamp)
+- `updatedAt` (timestamp)
+
+### Group
+
+- `id` (PK, auto-increment)
+- `userId` (FK → User.id, required)
+- `name` (string, required)
+- `amountPerBirthday` (decimal, required) - Monto fijo por cumpleaños
+- `description` (text, optional)
+- `createdAt` (timestamp)
+- `updatedAt` (timestamp)
+
+### Member
+
+- `id` (PK, auto-increment)
+- `groupId` (FK → Group.id, required)
+- `name` (string, required)
+- `phone` (string, optional)
+- `birthday` (date, required) - Fecha de cumpleaños (sin año)
+- `photoUrl` (string, optional) - URL de foto del miembro
+- `createdAt` (timestamp)
+- `updatedAt` (timestamp)
+
+### BirthdayEvent
+
+- `id` (PK, auto-increment)
+- `memberId` (FK → Member.id, required)
+- `groupId` (FK → Group.id, required)
+- `birthdayDate` (date, required) - Fecha completa del cumpleaños (con año actual)
+- `expectedAmount` (decimal, required) - Monto esperado = miembros × amountPerBirthday
+- `createdAt` (timestamp)
+- `updatedAt` (timestamp)
+
+### Payment
+
+- `id` (PK, auto-increment)
+- `birthdayEventId` (FK → BirthdayEvent.id, required)
+- `memberId` (FK → Member.id, required) - Miembro que realiza el pago
+- `amount` (decimal, required)
+- `datePaid` (date, required)
+- `proofUrl` (string, optional) - URL del comprobante (Cloudinary)
+- `createdAt` (timestamp)
+- `updatedAt` (timestamp)
+
+### Relaciones
+
+- User 1:N Group
+- Group 1:N Member
+- Group 1:N BirthdayEvent
+- Member 1:N BirthdayEvent
+- BirthdayEvent 1:N Payment
+- Member 1:N Payment (como pagador)
+
+---
+
+## 🔌 Endpoints Planificados
+
+### Autenticación
+
+- `POST /api/auth/register` - Crear nuevo usuario
+- `POST /api/auth/login` - Login y obtener JWT
+
+### Grupos
+
+- `GET /api/groups` - Listar grupos del usuario autenticado
+- `POST /api/groups` - Crear nuevo grupo
+- `PUT /api/groups/:id` - Editar grupo
+- `DELETE /api/groups/:id` - Eliminar grupo
+
+### Miembros
+
+- `GET /api/groups/:groupId/members` - Listar miembros de un grupo
+- `POST /api/groups/:groupId/members` - Agregar miembro a grupo
+- `PUT /api/members/:id` - Editar miembro
+- `DELETE /api/members/:id` - Eliminar miembro
+
+### Eventos de Cumpleaños
+
+- `GET /api/groups/:groupId/events` - Listar eventos de un grupo
+- `POST /api/groups/:groupId/events/generate` - Generar eventos del año actual
+- `GET /api/events/:eventId` - Obtener detalle de un evento
+
+### Pagos
+
+- `GET /api/events/:eventId/payments` - Listar pagos de un evento
+- `POST /api/events/:eventId/payments` - Registrar pago
+- `PUT /api/payments/:id` - Editar pago
+- `DELETE /api/payments/:id` - Eliminar pago
+
+### Vista Pública (Sin autenticación)
+
+- `GET /api/public/groups/:groupId/events/:eventId` - Vista pública de evento (con opción de anonimización)
+
+---
+
+## 📐 Reglas de Negocio
+
+### Generales
+
+1. **Un evento por cumpleaños por año**: Cada miembro tiene máximo un evento por año calendario
+2. **Cálculo de monto esperado**: `expectedAmount = número de miembros × amountPerBirthday`
+3. **Un pago por miembro por evento**: Un miembro solo puede tener un pago por evento (evitar duplicados)
+4. **Vista pública**: Endpoint sin autenticación para compartir eventos
+5. **Anonimización**: Opción de ocultar nombres en vista pública
+
+### Generación de Eventos
+
+- **Automática**: Cada 1 de enero (pendiente implementar cron job)
+- **Manual**: Endpoint para generar eventos del año actual
+- **Proceso**:
+  1. Leer todos los miembros del grupo
+  2. Para cada miembro, crear `BirthdayEvent` con fecha ajustada al año actual
+  3. Calcular `expectedAmount` basado en número actual de miembros
+
+### Registro de Pagos
+
+- Validar que el miembro pagador pertenece al grupo del evento
+- Evitar duplicados (un miembro, un pago por evento)
+- Actualizar totales cuando sea necesario
+- Opcional: subir comprobante (Cloudinary)
+
+### Seguridad
+
+- JWT obligatorio en todos los endpoints excepto vista pública
+- Hash de passwords con bcrypt (salt rounds: 12)
+- Validación de datos con express-validator o Zod
+- Rate limiting en endpoints sensibles (login, registro)
+- Sanitización de inputs
+
+---
+
+## ⚙️ Configuraciones Establecidas
+
+### TypeScript
+
+- **Strict mode**: Activado
+- **Target**: ESNext
+- **Module**: NodeNext
+- **Decorators**: Habilitados (para Sequelize)
+- **Source maps**: Habilitados
+
+### ESLint
+
+- **Reglas estrictas**: Prohibición de `any`, `@ts-ignore`, etc.
+- **Plugins**: TypeScript, Import, Node
+- **Extends**: Recommended + Prettier
+- **Máxima longitud de línea**: 100 caracteres
+
+### Prettier
+
+- **Semicolons**: Obligatorios
+- **Comillas**: Dobles
+- **Ancho de línea**: 100 caracteres
+- **Indentación**: 2 espacios
+- **Trailing commas**: No
+
+### Scripts Disponibles
+
+```bash
+pnpm dev              # Desarrollo con nodemon
+pnpm build            # Compilar TypeScript
+pnpm start            # Producción
+pnpm lint             # Ejecutar ESLint
+pnpm lint:fix         # Corregir automáticamente
+pnpm format           # Formatear con Prettier
+pnpm format:check     # Verificar formato
+```
+
+---
+
+## 🔐 Variables de Entorno Requeridas
+
+```env
+# Servidor
+PORT=3001
+NODE_ENV=development
+
+# Base de Datos
+DB_HOST=localhost
+DB_PORT=5432
+DB_NAME=tanda_cumpleanera
+DB_USER=postgres
+DB_PASSWORD=password
+
+# JWT
+JWT_SECRET=your-secret-key-here
+JWT_EXPIRES_IN=7d
+
+# Frontend
+FRONTEND_URL=http://localhost:3000
+
+# Cloudinary (Opcional)
+CLOUDINARY_URL=cloudinary://api_key:api_secret@cloud_name
+```
+
+---
+
+## 📊 Criterios de Aceptación
+
+### Performance
+
+- ✅ API debe responder en < 200 ms
+- ✅ Queries optimizadas (evitar N+1)
+- ✅ Índices en campos de búsqueda frecuente
+
+### Calidad
+
+- ✅ Relaciones funcionan sin errores
+- ✅ Validaciones impiden datos corruptos
+- ✅ Cobertura de tests mínima 80%
+
+### Seguridad
+
+- ✅ Sin endpoints expuestos
+- ✅ Passwords hasheados
+- ✅ JWT válido en endpoints protegidos
+- ✅ Rate limiting en endpoints sensibles
+
+### Funcionalidad
+
+- ✅ Generación de eventos funciona correctamente
+- ✅ Cálculo de montos es preciso
+- ✅ Vista pública con anonimización opcional
+
+---
+
+## 🚧 Estado Actual del Proyecto
+
+### ✅ Completado
+
+- [x] Configuración inicial de Express
+- [x] TypeScript configurado con strict mode
+- [x] ESLint y Prettier configurados
+- [x] Estructura base de archivos
+- [x] Documentación de reglas y contexto
+- [x] Scripts de desarrollo configurados
+
+### 🔄 En Progreso
+
+- [ ] Configuración de Sequelize y conexión a PostgreSQL
+- [ ] Modelos de base de datos
+- [ ] Migraciones
+- [ ] Sistema de autenticación (JWT + bcrypt)
+
+### 📋 Pendiente
+
+- [ ] Controllers y Services
+- [ ] Middlewares (auth, error handling, validation)
+- [ ] Routes y endpoints
+- [ ] Validaciones con express-validator o Zod
+- [ ] Sistema de generación de eventos
+- [ ] Integración con Cloudinary (opcional)
+- [ ] Tests unitarios e integración
+- [ ] Rate limiting
+- [ ] Logging estructurado
+- [ ] Documentación API (Swagger/OpenAPI)
+- [ ] Seeds para desarrollo
+
+---
+
+## 🎯 Próximos Pasos Sugeridos
+
+1. **Configurar base de datos**
+   - Instalar Sequelize CLI
+   - Configurar conexión a PostgreSQL
+   - Crear archivo de configuración de Sequelize
+
+2. **Crear modelos**
+   - User, Group, Member, BirthdayEvent, Payment
+   - Definir relaciones entre modelos
+   - Agregar validaciones a nivel de modelo
+
+3. **Sistema de autenticación**
+   - Instalar bcrypt y jsonwebtoken
+   - Crear middleware de autenticación
+   - Implementar endpoints de registro y login
+
+4. **Estructura base**
+   - Crear carpetas (controllers, services, routes, etc.)
+   - Implementar error handling centralizado
+   - Crear tipos TypeScript compartidos
+
+5. **Endpoints básicos**
+   - CRUD de grupos
+   - CRUD de miembros
+   - Generación de eventos
+
+---
+
+## 📚 Documentación Relacionada
+
+- **PRD.md**: Requerimientos completos del proyecto
+- **PROJECT_RULES.md**: Reglas y convenciones de código
+- **PROJECT_CONTEXT.md**: Este archivo (contexto general)
+
+---
+
+## 🔗 Notas Importantes
+
+- **Package Manager**: Usar `pnpm` (no npm o yarn)
+- **Tipado Estricto**: No usar `any`, siempre tipos específicos
+- **Validación**: Todos los inputs deben validarse
+- **Seguridad**: JWT obligatorio excepto en endpoints públicos
+- **Migrations**: Nunca editar BD directamente, siempre usar migrations
+- **Commits**: Usar convención semántica (feat, fix, docs, etc.)
+
+---
+
+**Para más detalles sobre reglas de código, ver `PROJECT_RULES.md`**  
+**Para requerimientos completos, ver `PRD.md`**

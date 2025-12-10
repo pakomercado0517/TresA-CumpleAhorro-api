@@ -1,0 +1,539 @@
+---
+alwaysApply: true
+---
+
+# Reglas del Proyecto - Tanda Cumpleañera Backend
+
+Este documento establece las reglas y convenciones que deben seguirse durante el desarrollo del proyecto, el cual debes seguirlas con tu rol de Desarrollador senior Full-Stack especialista en Backend.
+
+---
+
+## 📋 Índice
+
+1. [Tipado y TypeScript](#1-tipado-y-typescript)
+2. [Linting y Calidad de Código](#2-linting-y-calidad-de-código)
+3. [Formato de Código](#3-formato-de-código)
+4. [Arquitectura y Estructura](#4-arquitectura-y-estructura)
+5. [Seguridad](#5-seguridad)
+6. [Manejo de Errores](#6-manejo-de-errores)
+7. [Base de Datos](#7-base-de-datos)
+8. [Manejo de Fechas y Timezones](#8-manejo-de-fechas-y-timezones)
+9. [Testing](#9-testing)
+10. [Performance](#10-performance)
+11. [Documentación](#11-documentación)
+12. [Git y Versionado](#12-git-y-versionado)
+13. [Dependencias](#13-dependencias)
+
+---
+
+## 1. Tipado y TypeScript
+
+### ✅ Reglas Obligatorias
+
+- **NO usar `any`**: Siempre usar tipos específicos o `unknown` cuando sea necesario
+- **TypeScript strict mode**: Ya activado en `tsconfig.json`
+- **Tipos explícitos**: Todas las funciones públicas/exportadas deben tener tipos explícitos
+- **No `@ts-ignore`**: Prohibido usar `@ts-ignore` o `@ts-nocheck`
+- **`@ts-expect-error` con descripción**: Solo permitido con descripción justificada
+
+### Ejemplos
+
+```typescript
+// ❌ MAL
+function processData(data: any) {
+  return data.value;
+}
+
+// ✅ BIEN
+function processData(data: { value: string }): string {
+  return data.value;
+}
+
+// ✅ BIEN (cuando no conocemos el tipo)
+function processData(data: unknown): string {
+  if (typeof data === "object" && data !== null && "value" in data) {
+    return String(data.value);
+  }
+  throw new Error("Invalid data");
+}
+```
+
+---
+
+## 2. Linting y Calidad de Código
+
+### ESLint
+
+El proyecto usa ESLint con reglas estrictas. Ejecutar antes de commit:
+
+```bash
+pnpm lint
+pnpm lint:fix
+```
+
+### Reglas Principales
+
+- **No variables no usadas**: Todas las variables deben usarse (prefijo `_` para ignorar)
+- **No console.log**: Solo permitido `console.warn` y `console.error`
+- **Preferir `const`**: Usar `let` solo cuando sea necesario reasignar
+- **Arrow functions**: Preferir cuando sea apropiado
+- **Nombres descriptivos**: No abreviaciones (excepto convenciones comunes)
+- **Máxima longitud**: 100 caracteres por línea
+
+### Ejemplos
+
+```typescript
+// ❌ MAL
+let x = 5;
+const fn = function () {};
+console.log("debug");
+
+// ✅ BIEN
+const userId = 5;
+const fn = () => {};
+console.warn("Warning message");
+```
+
+---
+
+## 3. Formato de Código
+
+### Prettier
+
+El proyecto usa Prettier para formato automático. Ejecutar:
+
+```bash
+pnpm format
+pnpm format:check
+```
+
+### Configuración
+
+- **Semicolons**: Obligatorios
+- **Comillas**: Dobles (`"`)
+- **Ancho de línea**: 100 caracteres
+- **Indentación**: 2 espacios
+- **Trailing commas**: No
+
+### Integración
+
+- Prettier se ejecuta automáticamente en pre-commit
+- Integrado con ESLint (no conflictos)
+
+---
+
+## 4. Arquitectura y Estructura
+
+### Estructura de Carpetas
+
+```
+src/
+├── controllers/     # Lógica de request/response
+├── services/        # Lógica de negocio
+├── models/         # Modelos de Sequelize
+├── middlewares/    # Autenticación, validación, errores
+├── routes/         # Definición de rutas
+├── utils/          # Funciones auxiliares
+├── types/          # Tipos TypeScript compartidos
+├── config/         # Configuraciones (DB, etc.)
+└── validators/     # Validaciones con express-validator o Zod
+```
+
+### Convenciones de Nombres
+
+- **Archivos**: `kebab-case` (`user-controller.ts`, `auth-middleware.ts`)
+- **Clases**: `PascalCase` (`UserController`, `AuthMiddleware`)
+- **Funciones/Variables**: `camelCase` (`getUserById`, `isAuthenticated`)
+- **Constantes**: `UPPER_SNAKE_CASE` (`MAX_RETRIES`, `JWT_SECRET`)
+- **Interfaces/Types**: `PascalCase` con prefijo `I` opcional (`IUser`, `UserData`)
+
+### Separación de Responsabilidades
+
+- **Controllers**: Solo manejan HTTP (request/response), delegan a services
+- **Services**: Contienen toda la lógica de negocio
+- **Models**: Solo definición de datos y relaciones
+- **Middlewares**: Reutilizables, sin lógica de negocio
+- **Utils**: Funciones puras, sin dependencias de negocio
+
+### Ejemplo de Flujo
+
+```typescript
+// Route
+router.post("/users", authMiddleware, validateCreateUser, userController.create);
+
+// Controller
+export const create = async (req: Request, res: Response) => {
+  const user = await userService.createUser(req.body);
+  res.status(201).json(user);
+};
+
+// Service
+export const createUser = async (data: CreateUserDto): Promise<User> => {
+  // Lógica de negocio aquí
+  return await User.create(data);
+};
+```
+
+---
+
+## 5. Seguridad
+
+### Validación
+
+- **Obligatoria**: Todos los inputs deben validarse
+- **Zod o express-validator**: Usar para validación de schemas
+- **Sanitización**: Limpiar inputs antes de procesar
+
+### Autenticación y Autorización
+
+- **JWT obligatorio**: Excepto en endpoints públicos
+- **Middleware de auth**: Reutilizable y centralizado
+- **Verificación de permisos**: Validar que el usuario puede acceder al recurso
+
+### Variables de Entorno
+
+- **Nunca hardcodear**: Secretos siempre en `.env`
+- **Validación**: Validar variables de entorno al iniciar la app
+- **Tipos**: Crear tipos para `process.env`
+
+### Headers de Seguridad
+
+- **Helmet.js**: Usar para headers de seguridad
+- **CORS**: Configurado correctamente
+- **Rate Limiting**: En endpoints sensibles (login, registro)
+
+### Ejemplo
+
+```typescript
+// ❌ MAL
+const secret = "my-secret-key";
+
+// ✅ BIEN
+const secret = process.env.JWT_SECRET;
+if (!secret) {
+  throw new Error("JWT_SECRET is required");
+}
+```
+
+---
+
+## 6. Manejo de Errores
+
+### Error Handling Centralizado
+
+- **Middleware de errores**: Único punto de manejo
+- **Tipos de error personalizados**: Para diferentes casos
+- **Códigos HTTP correctos**: 400, 401, 403, 404, 500, etc.
+
+### Logging
+
+- **Estructurado**: No usar `console.log` en producción
+- **Niveles**: error, warn, info, debug
+- **Información sensible**: Nunca loggear passwords, tokens, etc.
+
+### Mensajes de Error
+
+- **Producción**: Mensajes genéricos (no exponer detalles internos)
+- **Desarrollo**: Mensajes detallados para debugging
+
+### Ejemplo
+
+```typescript
+// Error personalizado
+export class NotFoundError extends Error {
+  constructor(resource: string) {
+    super(`${resource} not found`);
+    this.name = "NotFoundError";
+  }
+}
+
+// Middleware de errores
+export const errorHandler = (err: Error, req: Request, res: Response, next: NextFunction) => {
+  if (err instanceof NotFoundError) {
+    return res.status(404).json({ error: err.message });
+  }
+  // ...
+};
+```
+
+---
+
+## 7. Base de Datos
+
+### Sequelize
+
+- **Migrations**: Siempre usar migrations (nunca editar directamente)
+- **Validaciones**: A nivel de modelo
+- **Transacciones**: Para operaciones críticas (múltiples inserts/updates)
+
+### Queries
+
+- **Optimizadas**: Evitar N+1 queries
+- **Índices**: Agregar en campos de búsqueda frecuente
+- **Paginación**: En todos los listados
+
+### Seeds
+
+- **Datos de prueba**: Usar seeds para desarrollo
+- **No en producción**: Nunca ejecutar seeds en producción
+
+### Ejemplo
+
+```typescript
+// ❌ MAL (N+1)
+const groups = await Group.findAll();
+for (const group of groups) {
+  const members = await group.getMembers(); // Query por cada grupo
+}
+
+// ✅ BIEN
+const groups = await Group.findAll({
+  include: [{ model: Member }]
+});
+```
+
+---
+
+## 8. Manejo de Fechas y Timezones
+
+### ⚠️ Regla Crítica
+
+**Siempre manejar fechas considerando las diferencias de timezone entre el servidor, la base de datos y los usuarios.**
+
+### Contexto del Proyecto
+
+- **Base de Datos**: Ubicada en Virginia, US (pero almacena en UTC)
+- **Usuarios**: Ubicados en Veracruz, México (America/Mexico_City, UTC-6)
+- **Almacenamiento**: Todas las fechas se almacenan en UTC en la base de datos
+
+### Reglas Obligatorias
+
+1. **Almacenamiento en UTC**: Todas las fechas en la BD deben estar en UTC
+2. **Conversión al recibir**: Convertir fechas del frontend (Veracruz) a UTC antes de guardar
+3. **Conversión al enviar**: Convertir fechas de la BD (UTC) a Veracruz antes de enviar al frontend
+4. **Usar utilidades**: Siempre usar las funciones de `src/utils/date.util.ts`
+5. **Sequelize configurado**: Sequelize está configurado para usar UTC (`timezone: "+00:00"`)
+
+### Utilidades Disponibles
+
+Todas las funciones están en `src/utils/date.util.ts`:
+
+- `convertUserDateToUTC(date)`: Convierte fecha de Veracruz a UTC (al recibir del frontend)
+- `convertUTCToUserDate(date)`: Convierte fecha de UTC a Veracruz (al enviar al frontend)
+- `formatUserDate(date, format?)`: Formatea fecha para mostrar al usuario
+- `parseDateOnlyToUTC(dateString)`: Parsea fecha DATEONLY del frontend a UTC
+- `formatDateOnlyFromUTC(date)`: Formatea fecha DATEONLY de UTC para el frontend
+
+### Ejemplos
+
+```typescript
+// ❌ MAL - No convertir fechas
+const member = await Member.create({
+  name: "Juan",
+  birthday: req.body.birthday // Fecha viene en Veracruz, se guarda incorrectamente
+});
+
+// ✅ BIEN - Convertir al recibir del frontend
+import { parseDateOnlyToUTC } from "../utils/date.util";
+
+const member = await Member.create({
+  name: "Juan",
+  birthday: parseDateOnlyToUTC(req.body.birthday) // Convierte a UTC
+});
+
+// ❌ MAL - Enviar fecha directamente de la BD
+res.json({
+  birthday: member.birthday // Fecha en UTC, incorrecta para el usuario
+});
+
+// ✅ BIEN - Convertir al enviar al frontend
+import { formatDateOnlyFromUTC } from "../utils/date.util";
+
+res.json({
+  birthday: formatDateOnlyFromUTC(member.birthday) // Convierte a Veracruz
+});
+
+// ✅ BIEN - Para timestamps (createdAt, updatedAt)
+import { formatUserDateTime } from "../utils/date.util";
+
+res.json({
+  createdAt: formatUserDateTime(member.createdAt) // Convierte timestamp a Veracruz
+});
+```
+
+### Campos de Fecha en los Modelos
+
+- **DATEONLY** (birthday, birthdayDate, datePaid): Usar `parseDateOnlyToUTC` al recibir y `formatDateOnlyFromUTC` al enviar
+- **TIMESTAMP** (createdAt, updatedAt): Usar `formatUserDateTime` al enviar (ya vienen en UTC de Sequelize)
+
+### Notas Importantes
+
+- **Nunca usar `new Date()` directamente** sin considerar timezone
+- **Siempre validar fechas** antes de convertir
+- **Los timestamps de Sequelize** ya vienen en UTC automáticamente
+- **Para comparaciones de fechas**, trabajar siempre en UTC
+
+---
+
+## 9. Testing
+
+### Cobertura
+
+- **Mínimo 80%**: Cobertura de código
+- **Tests unitarios**: Para lógica de negocio (services, utils)
+- **Tests de integración**: Para endpoints completos
+
+### Estructura
+
+- **Archivos de test**: `*.test.ts` o `*.spec.ts`
+- **Describe/It**: Estructura clara y descriptiva
+- **Mocks**: Para dependencias externas
+
+### Ejecución
+
+```bash
+pnpm test
+pnpm test:watch
+pnpm test:coverage
+```
+
+---
+
+## 10. Performance
+
+### Objetivos
+
+- **Respuesta < 200ms**: Según PRD
+- **Índices en BD**: Para queries frecuentes
+- **Paginación**: Obligatoria en listados
+- **Caching**: Cuando sea apropiado
+
+### Optimizaciones
+
+- **Queries eficientes**: Usar `include` de Sequelize correctamente
+- **Lazy loading**: Solo cargar lo necesario
+- **Compresión**: Habilitar gzip
+
+---
+
+## 11. Documentación
+
+### Código
+
+- **JSDoc**: En funciones públicas/complejas
+- **Comentarios**: Solo cuando el código no es autoexplicativo
+- **README**: Mantener actualizado
+
+### API
+
+- **Swagger/OpenAPI**: Documentación de endpoints (recomendado)
+- **Ejemplos**: Incluir ejemplos de request/response
+
+### Ejemplo JSDoc
+
+```typescript
+/**
+ * Crea un nuevo usuario en el sistema
+ * @param userData - Datos del usuario a crear
+ * @returns Usuario creado con ID generado
+ * @throws {ValidationError} Si los datos son inválidos
+ * @throws {ConflictError} Si el email ya existe
+ */
+export async function createUser(userData: CreateUserDto): Promise<User> {
+  // ...
+}
+```
+
+---
+
+## 12. Git y Versionado
+
+### Commits
+
+- **Semánticos**: Usar convención de commits
+  - `feat:` Nueva funcionalidad
+  - `fix:` Corrección de bug
+  - `docs:` Documentación
+  - `style:` Formato (no afecta código)
+  - `refactor:` Refactorización
+  - `test:` Tests
+  - `chore:` Tareas de mantenimiento
+
+### Branches
+
+- **Descriptivos**: Nombres claros (`feat/user-authentication`)
+- **No directos a main**: Siempre usar branches
+
+### Pre-commit Hooks
+
+- **Linting**: Ejecutar ESLint
+- **Formatting**: Ejecutar Prettier
+- **Tests**: Ejecutar tests rápidos
+
+---
+
+## 13. Dependencias
+
+### Gestión
+
+- **pnpm**: Package manager del proyecto
+- **Lock file**: Siempre commitear `pnpm-lock.yaml`
+- **Actualizaciones**: Revisar regularmente
+
+### Seguridad
+
+- **Auditorías**: `pnpm audit` regularmente
+- **Dependencias obsoletas**: Actualizar cuando sea seguro
+
+---
+
+## 🚀 Scripts Disponibles
+
+```bash
+# Desarrollo
+pnpm dev              # Iniciar en modo desarrollo con nodemon
+pnpm build            # Compilar TypeScript
+pnpm start            # Iniciar producción
+
+# Calidad de Código
+pnpm lint             # Ejecutar ESLint
+pnpm lint:fix         # Ejecutar ESLint y corregir
+pnpm format           # Formatear con Prettier
+pnpm format:check     # Verificar formato
+
+# Testing
+pnpm test             # Ejecutar tests
+pnpm test:watch       # Tests en modo watch
+pnpm test:coverage    # Tests con cobertura
+
+# Base de Datos
+pnpm db:migrate       # Ejecutar migrations
+pnpm db:seed          # Ejecutar seeds
+pnpm db:reset         # Resetear BD (solo desarrollo)
+```
+
+---
+
+## ⚠️ Reglas Críticas (No Negociables)
+
+1. **NO usar `any`** - Siempre tipos específicos
+2. **Validación obligatoria** - Todos los inputs
+3. **Autenticación JWT** - En todos los endpoints protegidos
+4. **Manejo de errores** - Centralizado y tipado
+5. **No console.log** - Solo warn/error
+6. **Migrations** - Nunca editar BD directamente
+7. **Manejo de fechas** - Siempre convertir entre UTC y Veracruz
+8. **Tests** - Cobertura mínima 80%
+
+---
+
+## 📝 Notas Finales
+
+- Estas reglas están diseñadas para mantener la calidad, seguridad y mantenibilidad del código
+- Si encuentras una situación donde una regla no aplica, documenta la excepción
+- Las reglas pueden evolucionar según las necesidades del proyecto
+- En caso de duda, consultar con el equipo antes de hacer excepciones
+
+---
+
+**Última actualización**: 2024

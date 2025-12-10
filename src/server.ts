@@ -1,0 +1,39 @@
+import express, { Application } from "express";
+import cors from "cors";
+import morgan from "morgan";
+
+import { env } from "./config/env.config";
+import authRoutes from "./routes/auth.routes";
+import groupRoutes from "./routes/group.routes";
+import memberRoutes from "./routes/member.routes";
+import eventRoutes from "./routes/event.routes";
+import paymentRoutes from "./routes/payment.routes";
+import { apiRateLimiter } from "./middlewares/rate-limit.middleware";
+
+const app: Application = express();
+
+// Middlewares globales
+app.use(morgan("dev"));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(
+  cors({
+    origin: env.FRONTEND_URL
+  })
+);
+
+// Rate limiting global (solo en producción)
+app.use(apiRateLimiter);
+
+// Routes
+app.get("/", (req, res) => {
+  res.send({ message: "API Tanda Cumpleaños funcionando correctamente" });
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/groups", groupRoutes);
+app.use("/api", memberRoutes);
+app.use("/api", eventRoutes);
+app.use("/api", paymentRoutes);
+
+export default app;
