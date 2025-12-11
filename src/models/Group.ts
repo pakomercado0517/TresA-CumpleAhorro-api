@@ -10,9 +10,9 @@ import {
   UpdatedAt
 } from "sequelize-typescript";
 
-import { User } from "./User";
-import { Member } from "./Member";
 import { BirthdayEvent } from "./BirthdayEvent";
+import { Member } from "./Member";
+import { User } from "./User";
 
 @Table({
   tableName: "Groups",
@@ -57,7 +57,7 @@ export class Group extends Model<Group> {
     type: DataType.TEXT,
     allowNull: true
   })
-  description?: string;
+  description?: string | null;
 
   @CreatedAt
   declare createdAt: Date;
@@ -75,4 +75,3 @@ export class Group extends Model<Group> {
   @HasMany(() => BirthdayEvent)
   birthdayEvents!: BirthdayEvent[];
 }
-

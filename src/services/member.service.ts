@@ -39,16 +39,30 @@ export const getGroupMembers = async (
     order: [["name", "ASC"]]
   });
 
-  return members.map((member) => ({
-    id: member.id,
-    groupId: member.groupId,
-    name: member.name,
-    phone: member.phone ?? undefined,
-    birthday: formatDateOnlyFromUTC(member.birthday),
-    photoUrl: member.photoUrl ?? undefined,
-    createdAt: member.createdAt,
-    updatedAt: member.updatedAt
-  }));
+  return members.map((member) => {
+    // Obtener valores raw de Sequelize para asegurar que se obtengan correctamente
+    const birthdayValue = member.getDataValue("birthday") || member.birthday;
+    const nameValue = member.getDataValue("name") || member.name;
+    const phoneValue = member.getDataValue("phone") || member.phone;
+    const photoUrlValue = member.getDataValue("photoUrl") || member.photoUrl;
+
+    // Construir objeto de respuesta con todos los campos explícitamente
+    const response: MemberResponse = {
+      id: member.id,
+      groupId: member.groupId,
+      name: nameValue || "",
+      phone: phoneValue !== null && phoneValue !== undefined ? phoneValue : undefined,
+      birthday:
+        birthdayValue !== null && birthdayValue !== undefined
+          ? formatDateOnlyFromUTC(birthdayValue)
+          : "",
+      photoUrl: photoUrlValue !== null && photoUrlValue !== undefined ? photoUrlValue : undefined,
+      createdAt: member.createdAt,
+      updatedAt: member.updatedAt
+    };
+
+    return response;
+  });
 };
 
 /**
@@ -133,13 +147,22 @@ export const getMemberById = async (
     throw error;
   }
 
+  // Obtener valores raw de Sequelize
+  const birthdayValue = member.getDataValue("birthday") || member.birthday;
+  const nameValue = member.getDataValue("name") || member.name;
+  const phoneValue = member.getDataValue("phone") || member.phone;
+  const photoUrlValue = member.getDataValue("photoUrl") || member.photoUrl;
+
   return {
     id: member.id,
     groupId: member.groupId,
-    name: member.name,
-    phone: member.phone ?? undefined,
-    birthday: formatDateOnlyFromUTC(member.birthday),
-    photoUrl: member.photoUrl ?? undefined,
+    name: nameValue || "",
+    phone: phoneValue !== null && phoneValue !== undefined ? phoneValue : undefined,
+    birthday:
+      birthdayValue !== null && birthdayValue !== undefined
+        ? formatDateOnlyFromUTC(birthdayValue)
+        : "",
+    photoUrl: photoUrlValue !== null && photoUrlValue !== undefined ? photoUrlValue : undefined,
     createdAt: member.createdAt,
     updatedAt: member.updatedAt
   };

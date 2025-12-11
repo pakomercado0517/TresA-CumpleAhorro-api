@@ -7,7 +7,7 @@ export interface CreateGroupDto {
 export interface UpdateGroupDto {
   name?: string;
   amountPerBirthday?: number;
-  description?: string;
+  description?: string | null;
 }
 
 export interface GroupResponse {

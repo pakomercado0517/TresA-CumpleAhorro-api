@@ -188,8 +188,17 @@ export const createPayment = async (
 ): Promise<PaymentResponse> => {
   const event = await verifyEventOwnership(eventId, userId);
 
+  // Obtener groupId del evento usando getDataValue para asegurar que se obtenga correctamente
+  const groupIdValue = event.getDataValue("groupId") || event.groupId;
+
+  if (!groupIdValue) {
+    const error = new Error("No se pudo obtener el grupo del evento");
+    error.name = "ValidationError";
+    throw error;
+  }
+
   // Verificar que el miembro pertenezca al grupo del evento
-  await verifyMemberBelongsToGroup(paymentData.memberId, event.groupId);
+  await verifyMemberBelongsToGroup(paymentData.memberId, groupIdValue);
 
   // Verificar que no exista ya un pago de este miembro para este evento
   const existingPayment = await Payment.findOne({

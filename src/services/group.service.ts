@@ -12,15 +12,31 @@ export const getUserGroups = async (userId: number): Promise<GroupResponse[]> =>
     order: [["createdAt", "DESC"]]
   });
 
-  return groups.map((group) => ({
-    id: group.id,
-    userId: group.userId,
-    name: group.name,
-    amountPerBirthday: Number(group.amountPerBirthday),
-    description: group.description ?? undefined,
-    createdAt: group.createdAt,
-    updatedAt: group.updatedAt
-  }));
+  return groups.map((group) => {
+    // Obtener valores raw de Sequelize para asegurar que se obtengan correctamente
+    const amountPerBirthdayValue = group.getDataValue("amountPerBirthday");
+    const nameValue = group.getDataValue("name");
+    const descriptionValue = group.getDataValue("description");
+
+    // Construir objeto de respuesta con todos los campos explícitamente
+    const response: GroupResponse = {
+      id: group.id,
+      userId: group.userId,
+      name: nameValue || group.name || "",
+      amountPerBirthday:
+        amountPerBirthdayValue !== null && amountPerBirthdayValue !== undefined
+          ? Number(amountPerBirthdayValue)
+          : Number(group.amountPerBirthday) || 0,
+      description:
+        descriptionValue !== null && descriptionValue !== undefined
+          ? descriptionValue
+          : group.description ?? undefined,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt
+    };
+
+    return response;
+  });
 };
 
 /**
@@ -106,18 +122,43 @@ export const updateGroup = async (
     throw error;
   }
 
-  // Actualizar solo los campos proporcionados
+  // Construir objeto de actualización solo con los campos proporcionados
+  const updateData: Partial<{
+    name: string;
+    amountPerBirthday: number;
+    description: string | null;
+  }> = {};
+
   if (groupData.name !== undefined) {
-    group.name = groupData.name;
+    updateData.name = groupData.name;
   }
   if (groupData.amountPerBirthday !== undefined) {
-    group.amountPerBirthday = groupData.amountPerBirthday;
+    updateData.amountPerBirthday = groupData.amountPerBirthday;
   }
+  // description puede ser undefined (no actualizar), null (eliminar), o string (actualizar)
   if (groupData.description !== undefined) {
-    group.description = groupData.description;
+    // Si es string vacío, convertir a null; si es null, mantener null; si es string, mantener string
+    updateData.description = groupData.description === "" ? null : groupData.description;
   }
 
-  await group.save();
+  // Si no hay campos para actualizar, retornar el grupo sin cambios
+  if (Object.keys(updateData).length === 0) {
+    return {
+      id: group.id,
+      userId: group.userId,
+      name: group.name,
+      amountPerBirthday: Number(group.amountPerBirthday),
+      description: group.description ?? undefined,
+      createdAt: group.createdAt,
+      updatedAt: group.updatedAt
+    };
+  }
+
+  // Actualizar usando update() que es más confiable
+  await group.update(updateData);
+
+  // Recargar el grupo para obtener los valores actualizados
+  await group.reload();
 
   return {
     id: group.id,

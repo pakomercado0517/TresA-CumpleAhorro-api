@@ -44,10 +44,18 @@ export const validateUpdateGroup = [
     .toFloat(),
 
   body("description")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
     .trim()
     .isLength({ max: 500 })
     .withMessage("La descripción no puede exceder 500 caracteres")
+    .custom((value) => {
+      // Permitir null, undefined, o string vacío para eliminar la descripción
+      if (value === null || value === undefined || value === "") {
+        return true;
+      }
+      return typeof value === "string";
+    })
+    .withMessage("La descripción debe ser un string, null, o estar vacía")
 ];
 
 /**

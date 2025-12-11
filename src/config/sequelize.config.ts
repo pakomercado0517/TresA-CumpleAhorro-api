@@ -49,7 +49,14 @@ export const sequelize = new Sequelize({
   username: parsedConfig.username,
   password: parsedConfig.password,
   models: [User, Group, Member, BirthdayEvent, Payment],
-  logging: process.env.NODE_ENV === "development" ? console.log : false,
+  logging: process.env.NODE_ENV === "development" 
+    ? (sql: string) => {
+        // Solo mostrar queries en modo debug, no en desarrollo normal
+        if (process.env.DEBUG_SQL === "true") {
+          console.log(sql);
+        }
+      }
+    : false,
   timezone: "+00:00", // Forzar UTC en Sequelize
   define: {
     timestamps: true,

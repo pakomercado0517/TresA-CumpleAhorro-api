@@ -32,8 +32,12 @@ const verifyGroupOwnership = async (
 
 /**
  * Ajusta el año de una fecha al año actual
+ * 
+ * IMPORTANTE: Para campos DATEONLY, NO se debe hacer conversión de timezone.
+ * Simplemente extraemos mes y día, y creamos la fecha con el año actual.
+ * 
  * @param birthday - Fecha de cumpleaños (Date o string "yyyy-MM-dd" de Sequelize)
- * @returns Fecha con el año actual en UTC
+ * @returns Fecha con el año actual en UTC (medianoche)
  */
 const adjustBirthdayToCurrentYear = (birthday: Date | string): Date => {
   let birthdayString: string;
@@ -43,22 +47,11 @@ const adjustBirthdayToCurrentYear = (birthday: Date | string): Date => {
     // Si ya es string, usarlo directamente
     birthdayString = birthday;
   } else if (birthday instanceof Date) {
-    // Si es Date object, convertirlo a string
-    try {
-      // Intentar obtener el string del Date usando toISOString
-      const isoString = birthday.toISOString();
-      birthdayString = isoString.split("T")[0]; // Obtener solo la parte de la fecha
-    } catch (error) {
-      // Si toISOString falla, intentar con getFullYear, getMonth, getDate
-      try {
-        const year = birthday.getFullYear();
-        const month = String(birthday.getMonth() + 1).padStart(2, "0");
-        const day = String(birthday.getDate()).padStart(2, "0");
-        birthdayString = `${year}-${month}-${day}`;
-      } catch (innerError) {
-        throw new Error(`Invalid birthday date object: ${birthday}`);
-      }
-    }
+    // Si es Date object, extraer la fecha en UTC
+    const year = birthday.getUTCFullYear();
+    const month = String(birthday.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(birthday.getUTCDate()).padStart(2, "0");
+    birthdayString = `${year}-${month}-${day}`;
   } else {
     throw new Error(`Invalid birthday type: ${typeof birthday}`);
   }
@@ -68,24 +61,15 @@ const adjustBirthdayToCurrentYear = (birthday: Date | string): Date => {
     throw new Error(`Invalid birthday date format: ${birthdayString}. Expected yyyy-MM-dd`);
   }
 
-  // Parsear el string como UTC (Sequelize devuelve DATEONLY en UTC)
-  // Interpretamos el string como medianoche UTC
-  const utcDate = parseISO(`${birthdayString}T00:00:00Z`);
-  if (!isValid(utcDate)) {
-    throw new Error(`Invalid birthday date string: ${birthdayString}`);
-  }
-
-  // Convertir a zona horaria del usuario
-  const userDate = convertUTCToUserDate(utcDate);
+  // Extraer mes y día del birthday original
+  const [, month, day] = birthdayString.split("-");
+  
+  // Crear fecha con el año actual, preservando mes y día
   const currentYear = new Date().getFullYear();
-
-  // Crear nueva fecha con el año actual
-  const adjustedDate = new Date(userDate);
-  adjustedDate.setFullYear(currentYear);
-
-  // Convertir de vuelta a UTC
-  const adjustedDateString = format(adjustedDate, "yyyy-MM-dd");
-  return parseDateOnlyToUTC(adjustedDateString);
+  const birthdayThisYear = `${currentYear}-${month}-${day}`;
+  
+  // Convertir a Date UTC sin conversión de timezone
+  return parseDateOnlyToUTC(birthdayThisYear);
 };
 
 /**
@@ -112,15 +96,60 @@ export const getGroupEvents = async (
     order: [["birthdayDate", "ASC"]]
   });
 
-  return events.map((event) => ({
-    id: event.id,
-    memberId: event.memberId,
-    groupId: event.groupId,
-    birthdayDate: formatDateOnlyFromUTC(event.birthdayDate),
-    expectedAmount: Number(event.expectedAmount),
-    createdAt: event.createdAt,
-    updatedAt: event.updatedAt
-  }));
+  return events.map((event) => {
+    // Obtener valores raw de Sequelize para asegurar que se obtengan correctamente
+    const birthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
+    const memberIdValue = event.getDataValue("memberId") || event.memberId;
+    const groupIdValue = event.getDataValue("groupId") || event.groupId;
+    const expectedAmountValue = event.getDataValue("expectedAmount") || event.expectedAmount;
+
+    // Construir objeto de respuesta con todos los campos explícitamente
+    const response: BirthdayEventResponse = {
+      id: event.id,
+      memberId: memberIdValue || 0,
+      groupId: groupIdValue || 0,
+      birthdayDate:
+        birthdayDateValue !== null && birthdayDateValue !== undefined
+          ? formatDateOnlyFromUTC(birthdayDateValue)
+          : "",
+      expectedAmount:
+        expectedAmountValue !== null && expectedAmountValue !== undefined
+          ? Number(expectedAmountValue)
+          : 0,
+      createdAt: event.createdAt,
+      updatedAt: event.updatedAt
+    };
+
+    // Si hay información del miembro, incluirla
+    if (event.member) {
+      const memberBirthdayValue = event.member.getDataValue("birthday") || event.member.birthday;
+      const memberNameValue = event.member.getDataValue("name") || event.member.name;
+      const memberPhoneValue = event.member.getDataValue("phone") || event.member.phone;
+      const memberPhotoUrlValue = event.member.getDataValue("photoUrl") || event.member.photoUrl;
+
+      response.member = {
+        id: event.member.id,
+        groupId: event.member.groupId,
+        name: memberNameValue || "",
+        phone:
+          memberPhoneValue !== null && memberPhoneValue !== undefined
+            ? memberPhoneValue
+            : undefined,
+        birthday:
+          memberBirthdayValue !== null && memberBirthdayValue !== undefined
+            ? formatDateOnlyFromUTC(memberBirthdayValue)
+            : "",
+        photoUrl:
+          memberPhotoUrlValue !== null && memberPhotoUrlValue !== undefined
+            ? memberPhotoUrlValue
+            : undefined,
+        createdAt: event.member.createdAt,
+        updatedAt: event.member.updatedAt
+      };
+    }
+
+    return response;
+  });
 };
 
 /**
@@ -149,8 +178,17 @@ export const generateEventsForCurrentYear = async (
     };
   }
 
+  // Obtener amountPerBirthday usando getDataValue para asegurar que se obtenga correctamente
+  const amountPerBirthdayValue = group.getDataValue("amountPerBirthday") || group.amountPerBirthday;
+  
+  if (!amountPerBirthdayValue) {
+    const error = new Error("No se pudo obtener el monto por cumpleaños del grupo");
+    error.name = "ValidationError";
+    throw error;
+  }
+
   // Calcular el monto esperado: número de miembros × monto por cumpleaños
-  const expectedAmount = members.length * Number(group.amountPerBirthday);
+  const expectedAmount = members.length * Number(amountPerBirthdayValue);
   const currentYear = new Date().getFullYear();
   const eventsCreated: BirthdayEventResponse[] = [];
 
@@ -201,6 +239,12 @@ export const generateEventsForCurrentYear = async (
         birthdayDateFormatted = formatDateOnlyFromUTC(birthdayDateValue);
       }
 
+      // Obtener información completa del miembro para la respuesta
+      const memberBirthdayValue = member.getDataValue("birthday") || member.birthday;
+      const memberNameValue = member.getDataValue("name") || member.name;
+      const memberPhoneValue = member.getDataValue("phone") || member.phone;
+      const memberPhotoUrlValue = member.getDataValue("photoUrl") || member.photoUrl;
+
       eventsCreated.push({
         id: event.id,
         memberId: event.memberId,
@@ -208,7 +252,20 @@ export const generateEventsForCurrentYear = async (
         birthdayDate: birthdayDateFormatted,
         expectedAmount: Number(event.expectedAmount),
         createdAt: event.createdAt,
-        updatedAt: event.updatedAt
+        updatedAt: event.updatedAt,
+        member: {
+          id: member.id,
+          groupId: member.groupId,
+          name: memberNameValue || "",
+          phone: memberPhoneValue !== null && memberPhoneValue !== undefined ? memberPhoneValue : undefined,
+          birthday:
+            memberBirthdayValue !== null && memberBirthdayValue !== undefined
+              ? formatDateOnlyFromUTC(memberBirthdayValue)
+              : "",
+          photoUrl: memberPhotoUrlValue !== null && memberPhotoUrlValue !== undefined ? memberPhotoUrlValue : undefined,
+          createdAt: member.createdAt,
+          updatedAt: member.updatedAt
+        }
       });
     }
   }
@@ -252,26 +309,55 @@ export const getEventById = async (
     throw error;
   }
 
-  return {
+  // Obtener valores raw de Sequelize para todos los campos
+  const birthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
+  const memberIdValue = event.getDataValue("memberId") || event.memberId;
+  const groupIdValue = event.getDataValue("groupId") || event.groupId;
+  const expectedAmountValue = event.getDataValue("expectedAmount") || event.expectedAmount;
+
+  // Construir objeto de respuesta con todos los campos explícitamente
+  const response: BirthdayEventResponse = {
     id: event.id,
-    memberId: event.memberId,
-    groupId: event.groupId,
-    birthdayDate: formatDateOnlyFromUTC(event.birthdayDate),
-    expectedAmount: Number(event.expectedAmount),
+    memberId: memberIdValue || 0,
+    groupId: groupIdValue || 0,
+    birthdayDate:
+      birthdayDateValue !== null && birthdayDateValue !== undefined
+        ? formatDateOnlyFromUTC(birthdayDateValue)
+        : "",
+    expectedAmount:
+      expectedAmountValue !== null && expectedAmountValue !== undefined
+        ? Number(expectedAmountValue)
+        : 0,
     createdAt: event.createdAt,
-    updatedAt: event.updatedAt,
-    member: event.member
-      ? {
-          id: event.member.id,
-          groupId: event.member.groupId,
-          name: event.member.name,
-          phone: event.member.phone ?? undefined,
-          birthday: formatDateOnlyFromUTC(event.member.birthday),
-          photoUrl: event.member.photoUrl ?? undefined,
-          createdAt: event.member.createdAt,
-          updatedAt: event.member.updatedAt
-        }
-      : undefined
+    updatedAt: event.updatedAt
   };
+
+  // Si hay información del miembro, incluirla
+  if (event.member) {
+    const memberBirthdayValue = event.member.getDataValue("birthday") || event.member.birthday;
+    const memberNameValue = event.member.getDataValue("name") || event.member.name;
+    const memberPhoneValue = event.member.getDataValue("phone") || event.member.phone;
+    const memberPhotoUrlValue = event.member.getDataValue("photoUrl") || event.member.photoUrl;
+
+    response.member = {
+      id: event.member.id,
+      groupId: event.member.groupId,
+      name: memberNameValue || "",
+      phone:
+        memberPhoneValue !== null && memberPhoneValue !== undefined ? memberPhoneValue : undefined,
+      birthday:
+        memberBirthdayValue !== null && memberBirthdayValue !== undefined
+          ? formatDateOnlyFromUTC(memberBirthdayValue)
+          : "",
+      photoUrl:
+        memberPhotoUrlValue !== null && memberPhotoUrlValue !== undefined
+          ? memberPhotoUrlValue
+          : undefined,
+      createdAt: event.member.createdAt,
+      updatedAt: event.member.updatedAt
+    };
+  }
+
+  return response;
 };
 

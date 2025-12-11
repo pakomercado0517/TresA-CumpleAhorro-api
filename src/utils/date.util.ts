@@ -123,31 +123,43 @@ export const getDateOnly = (date: Date | string): string => {
  * Convierte una fecha del frontend (string en formato yyyy-MM-dd) a Date en UTC
  * Específico para campos DATEONLY de Sequelize
  *
+ * IMPORTANTE: Para campos DATEONLY (solo fecha, sin hora), NO se debe hacer
+ * conversión de timezone. La fecha se guarda tal cual en UTC a medianoche.
+ *
  * @param dateString - Fecha en formato "yyyy-MM-dd" (sin hora)
- * @returns Date en UTC a medianoche
+ * @returns Date en UTC a medianoche (00:00:00 UTC)
  *
  * @example
- * // Frontend envía: "2024-03-15" (cumpleaños)
- * // BD guarda: Date en UTC a las 00:00:00 del día en Veracruz
- * const utcDate = parseDateOnlyToUTC("2024-03-15");
+ * // Frontend envía: "1984-10-30" (cumpleaños)
+ * // BD guarda: Date en UTC "1984-10-30T00:00:00Z"
+ * const utcDate = parseDateOnlyToUTC("1984-10-30");
  */
 export const parseDateOnlyToUTC = (dateString: string): Date => {
-  // Crear fecha a medianoche en la zona horaria del usuario
-  const userDate = parseISO(`${dateString}T00:00:00`);
-  if (!isValid(userDate)) {
+  // Validar formato
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+    throw new Error(`Invalid date string format: ${dateString}. Expected: yyyy-MM-dd`);
+  }
+
+  // Crear fecha directamente en UTC a medianoche, sin conversión de timezone
+  // Esto preserva la fecha exacta que el usuario ingresó
+  const utcDate = parseISO(`${dateString}T00:00:00Z`);
+  if (!isValid(utcDate)) {
     throw new Error(`Invalid date string: ${dateString}`);
   }
 
-  // Convertir a UTC
-  return fromZonedTime(userDate, USER_TIMEZONE);
+  return utcDate;
 };
 
 /**
  * Convierte una fecha DATEONLY de la BD (UTC) a string en formato yyyy-MM-dd
  * para el frontend
  *
+ * IMPORTANTE: Para campos DATEONLY (solo fecha, sin hora), NO se debe hacer
+ * conversión de timezone porque una fecha sin hora no tiene timezone.
+ * Si la BD guarda "1984-10-30", se devuelve "1984-10-30" tal cual.
+ *
  * @param date - Fecha en UTC (Date, string ISO, o string "yyyy-MM-dd" de Sequelize)
- * @returns String en formato "yyyy-MM-dd" en la zona horaria del usuario
+ * @returns String en formato "yyyy-MM-dd" (sin conversión de timezone)
  */
 export const formatDateOnlyFromUTC = (date: Date | string): string => {
   // Si es null o undefined, retornar string vacío
@@ -159,15 +171,8 @@ export const formatDateOnlyFromUTC = (date: Date | string): string => {
   if (typeof date === "string") {
     // Verificar si es formato "yyyy-MM-dd"
     if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      // Sequelize devuelve DATEONLY como "yyyy-MM-dd" en UTC
-      // Parseamos como si fuera medianoche UTC
-      const utcDate = parseISO(`${date}T00:00:00Z`);
-      if (isValid(utcDate)) {
-        // Convertir a zona horaria del usuario y formatear
-        const userDate = toZonedTime(utcDate, USER_TIMEZONE);
-        return format(userDate, "yyyy-MM-dd");
-      }
-      // Si no es válido, retornar el string original
+      // Para campos DATEONLY, devolver la fecha tal cual sin conversión de timezone
+      // porque una fecha sin hora no tiene timezone
       return date;
     }
     
@@ -182,41 +187,16 @@ export const formatDateOnlyFromUTC = (date: Date | string): string => {
   
   // Para Date objects
   if (date instanceof Date) {
-    // Si el Date es inválido, intentar convertirlo a string primero
     if (!isValid(date)) {
-      try {
-        // Intentar obtener el string del Date (puede que tenga información útil)
-        const dateStr = date.toISOString().split("T")[0];
-        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          const utcDate = parseISO(`${dateStr}T00:00:00Z`);
-          if (isValid(utcDate)) {
-            const userDate = toZonedTime(utcDate, USER_TIMEZONE);
-            return format(userDate, "yyyy-MM-dd");
-          }
-        }
-      } catch (error) {
-        // Si toISOString falla, intentar otros métodos
-        try {
-          const year = date.getFullYear();
-          const month = String(date.getMonth() + 1).padStart(2, "0");
-          const day = String(date.getDate()).padStart(2, "0");
-          const dateStr = `${year}-${month}-${day}`;
-          if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-            const utcDate = parseISO(`${dateStr}T00:00:00Z`);
-            if (isValid(utcDate)) {
-              const userDate = toZonedTime(utcDate, USER_TIMEZONE);
-              return format(userDate, "yyyy-MM-dd");
-            }
-          }
-        } catch (innerError) {
-          // Si todo falla, lanzar error
-          throw new Error(`Invalid date object: ${date}`);
-        }
-      }
       throw new Error(`Invalid date object: ${date}`);
     }
     
-    return getDateOnly(date);
+    // Para campos DATEONLY, extraer solo la fecha sin conversión de timezone
+    // Usar UTC para evitar problemas de timezone
+    const year = date.getUTCFullYear();
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(date.getUTCDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
   }
   
   throw new Error(`Invalid date type: ${typeof date}`);

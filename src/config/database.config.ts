@@ -23,7 +23,9 @@ const parseDatabaseUrl = (url: string): SequelizeOptions => {
   const match = url.match(urlPattern);
 
   if (!match) {
-    throw new Error("Invalid DATABASE_URL format. Expected: postgresql://user:password@host:port/database");
+    throw new Error(
+      "Invalid DATABASE_URL format. Expected: postgresql://user:password@host:port/database"
+    );
   }
 
   const [, , username, password, host, port, database] = match;
@@ -56,7 +58,7 @@ const parsedConfig = parseDatabaseUrl(databaseUrl);
 const config: DatabaseConfig = {
   development: {
     ...parsedConfig,
-    logging: console.log
+    logging: false
   },
   test: {
     ...parsedConfig,
@@ -69,4 +71,3 @@ const config: DatabaseConfig = {
 };
 
 export default config;
-

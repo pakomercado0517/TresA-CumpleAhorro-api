@@ -77,10 +77,7 @@ export const create = async (
 /**
  * Controller para obtener un grupo por ID
  */
-export const getById = async (
-  req: Request<{ id: string }>,
-  res: Response
-): Promise<void> => {
+export const getById = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
 
@@ -147,11 +144,18 @@ export const update = async (
       return;
     }
 
-    const groupData: UpdateGroupDto = {
-      name: req.body.name,
-      amountPerBirthday: req.body.amountPerBirthday,
-      description: req.body.description
-    };
+    // Construir objeto solo con los campos que están presentes en el body
+    const groupData: UpdateGroupDto = {};
+
+    if (req.body.name !== undefined) {
+      groupData.name = req.body.name;
+    }
+    if (req.body.amountPerBirthday !== undefined) {
+      groupData.amountPerBirthday = req.body.amountPerBirthday;
+    }
+    if (req.body.description !== undefined) {
+      groupData.description = req.body.description;
+    }
 
     const group = await updateGroup(groupId, userId, groupData);
 
@@ -216,4 +220,3 @@ export const remove = async (req: Request<{ id: string }>, res: Response): Promi
     });
   }
 };
-
