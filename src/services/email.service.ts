@@ -1,5 +1,5 @@
-import { Resend } from "resend";
 import nodemailer from "nodemailer";
+import { Resend } from "resend";
 
 import { env } from "../config/env.config";
 import { EmailOptions, SendEmailResult } from "../types/email.types";
@@ -155,7 +155,7 @@ const sendEmailViaResend = async (options: EmailOptions): Promise<SendEmailResul
 
     return {
       success: true,
-      messageId: data.data?.id
+      messageId: data.data.id
     };
   } catch (error) {
     console.error("Error al enviar email con Resend:", error);

@@ -29,4 +29,3 @@ export const validateRequest = (
 ): Array<ValidationChain | typeof validate> => {
   return [...validations, validate];
 };
-

@@ -22,4 +22,3 @@ export interface MemberResponse {
   createdAt: Date;
   updatedAt: Date;
 }
-

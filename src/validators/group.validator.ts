@@ -69,4 +69,3 @@ export const validateGroupId = [
     .withMessage("El ID del grupo debe ser un número entero positivo")
     .toInt()
 ];
-

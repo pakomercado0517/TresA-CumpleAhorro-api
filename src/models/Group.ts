@@ -31,7 +31,7 @@ export class Group extends Model<Group> {
     type: DataType.INTEGER,
     allowNull: false
   })
-  userId!: number;
+  declare userId: number;
 
   @Column({
     type: DataType.STRING,
@@ -41,7 +41,7 @@ export class Group extends Model<Group> {
       len: [1, 100]
     }
   })
-  name!: string;
+  declare name: string;
 
   @Column({
     type: DataType.DECIMAL(10, 2),
@@ -51,13 +51,13 @@ export class Group extends Model<Group> {
       notNull: true
     }
   })
-  amountPerBirthday!: number;
+  declare amountPerBirthday: number;
 
   @Column({
     type: DataType.TEXT,
     allowNull: true
   })
-  description?: string | null;
+  declare description: string | null;
 
   @CreatedAt
   declare createdAt: Date;

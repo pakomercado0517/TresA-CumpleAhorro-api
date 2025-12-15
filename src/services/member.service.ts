@@ -1,7 +1,8 @@
-import { Member } from "../models/Member";
 import { Group } from "../models/Group";
+import { Member } from "../models/Member";
 import { CreateMemberDto, UpdateMemberDto, MemberResponse } from "../types/member.types";
 import { formatDateOnlyFromUTC } from "../utils/date.util";
+
 import { recalculateGroupEventsExpectedAmount } from "./event.service";
 
 /**
@@ -94,9 +95,7 @@ export const createMember = async (
   // Recalcular expectedAmount de todos los eventos del grupo
   // porque ahora hay un miembro más
   // IMPORTANTE: Esperar a que termine para garantizar consistencia
-  console.log(`[createMember] Recalculando expectedAmount para grupo ${groupId} después de agregar miembro ${member.id}`);
-  const updatedEventsCount = await recalculateGroupEventsExpectedAmount(groupId);
-  console.log(`[createMember] ${updatedEventsCount} eventos actualizados en grupo ${groupId}`);
+  await recalculateGroupEventsExpectedAmount(groupId);
 
   // Obtener el birthday como string directamente de Sequelize
   // Sequelize devuelve DATEONLY como string "YYYY-MM-DD"
@@ -210,14 +209,14 @@ export const updateMember = async (
     member.name = memberData.name;
   }
   if (memberData.phone !== undefined) {
-    member.phone = memberData.phone || undefined;
+    member.phone = memberData.phone || null;
   }
   if (memberData.birthday !== undefined) {
     // Para campos DATEONLY, pasar el string directamente
     member.birthday = memberData.birthday as unknown as Date;
   }
   if (memberData.photoUrl !== undefined) {
-    member.photoUrl = memberData.photoUrl || undefined;
+    member.photoUrl = memberData.photoUrl || null;
   }
 
   await member.save();
@@ -266,8 +265,5 @@ export const deleteMember = async (memberId: number, userId: number): Promise<vo
   // Recalcular expectedAmount de todos los eventos del grupo
   // porque ahora hay un miembro menos
   // IMPORTANTE: Esperar a que termine para garantizar consistencia
-  console.log(`[deleteMember] Recalculando expectedAmount para grupo ${groupId} después de eliminar miembro ${memberIdToDelete}`);
-  const updatedEventsCount = await recalculateGroupEventsExpectedAmount(groupId);
-  console.log(`[deleteMember] ${updatedEventsCount} eventos actualizados en grupo ${groupId}`);
+  await recalculateGroupEventsExpectedAmount(groupId);
 };
-

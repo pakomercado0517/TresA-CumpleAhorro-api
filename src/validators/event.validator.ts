@@ -23,4 +23,3 @@ export const validateEventId = [
     .withMessage("El ID del evento debe ser un número entero positivo")
     .toInt()
 ];
-

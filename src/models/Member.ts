@@ -10,8 +10,8 @@ import {
   UpdatedAt
 } from "sequelize-typescript";
 
-import { Group } from "./Group";
 import { BirthdayEvent } from "./BirthdayEvent";
+import { Group } from "./Group";
 import { Payment } from "./Payment";
 
 @Table({
@@ -31,7 +31,7 @@ export class Member extends Model<Member> {
     type: DataType.INTEGER,
     allowNull: false
   })
-  groupId!: number;
+  declare groupId: number;
 
   @Column({
     type: DataType.STRING,
@@ -41,7 +41,7 @@ export class Member extends Model<Member> {
       len: [1, 100]
     }
   })
-  name!: string;
+  declare name: string;
 
   @Column({
     type: DataType.STRING,
@@ -50,7 +50,7 @@ export class Member extends Model<Member> {
       len: [0, 20]
     }
   })
-  phone?: string;
+  declare phone: string | null;
 
   @Column({
     type: DataType.DATEONLY,
@@ -60,7 +60,7 @@ export class Member extends Model<Member> {
       isDate: true
     }
   })
-  birthday!: Date;
+  declare birthday: Date;
 
   @Column({
     type: DataType.STRING,
@@ -69,7 +69,7 @@ export class Member extends Model<Member> {
       isUrl: true
     }
   })
-  photoUrl?: string;
+  declare photoUrl: string | null;
 
   @CreatedAt
   declare createdAt: Date;
@@ -87,4 +87,3 @@ export class Member extends Model<Member> {
   @HasMany(() => Payment)
   payments!: Payment[];
 }
-

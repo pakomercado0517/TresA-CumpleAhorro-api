@@ -1,14 +1,14 @@
-import express, { Application } from "express";
 import cors from "cors";
+import express, { Application } from "express";
 import morgan from "morgan";
 
 import { env } from "./config/env.config";
+import { apiRateLimiter } from "./middlewares/rate-limit.middleware";
 import authRoutes from "./routes/auth.routes";
+import eventRoutes from "./routes/event.routes";
 import groupRoutes from "./routes/group.routes";
 import memberRoutes from "./routes/member.routes";
-import eventRoutes from "./routes/event.routes";
 import paymentRoutes from "./routes/payment.routes";
-import { apiRateLimiter } from "./middlewares/rate-limit.middleware";
 
 const app: Application = express();
 

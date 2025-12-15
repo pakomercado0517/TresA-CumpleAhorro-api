@@ -1,17 +1,21 @@
-import { Payment } from "../models/Payment";
+import { Op } from "sequelize";
+
 import { BirthdayEvent } from "../models/BirthdayEvent";
-import { Member } from "../models/Member";
 import { Group } from "../models/Group";
+import { Member } from "../models/Member";
+import { Payment } from "../models/Payment";
 import {
   CreatePaymentDto,
   UpdatePaymentDto,
   PaymentResponse,
   PaymentsListResponse,
-  PaymentSummary
+  PaymentSummary,
+  GroupPaymentResponse,
+  GroupPaymentsListResponse
 } from "../types/payment.types";
 import { formatDateOnlyFromUTC } from "../utils/date.util";
+
 import { recalculateGroupEventsExpectedAmount } from "./event.service";
-import { Op } from "sequelize";
 
 /**
  * Verifica que un evento pertenezca a un grupo del usuario
@@ -111,7 +115,7 @@ export const getEventPayments = async (
   // IMPORTANTE: Recalcular expectedAmount antes de calcular el resumen de pagos
   // para asegurar que refleje el número actual de miembros
   // Obtener groupId usando getDataValue() porque el include no carga event.groupId directamente
-  const groupId = event.getDataValue("groupId") || event.groupId || event.group?.id;
+  const groupId = event.getDataValue("groupId") || event.groupId || event.group.id;
   
   if (groupId) {
     await recalculateGroupEventsExpectedAmount(groupId);
@@ -145,7 +149,6 @@ export const getEventPayments = async (
     const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
     const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
     const amountValue = payment.getDataValue("amount") || payment.amount;
-    const proofUrlValue = payment.getDataValue("proofUrl") || payment.proofUrl;
 
     // Obtener el miembro del map
     const member = membersMap.get(memberIdValue);
@@ -162,24 +165,20 @@ export const getEventPayments = async (
         datePaidValue !== null && datePaidValue !== undefined
           ? formatDateOnlyFromUTC(datePaidValue)
           : "",
-      proofUrl: proofUrlValue !== null && proofUrlValue !== undefined ? proofUrlValue : undefined,
+      proofUrl: payment.proofUrl ?? undefined,
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,
       member: member
         ? {
             id: member.id,
-            groupId: member.getDataValue("groupId") || member.groupId,
-            name: member.getDataValue("name") || member.name,
-            phone: member.getDataValue("phone") !== null && member.getDataValue("phone") !== undefined 
-              ? member.getDataValue("phone") || member.phone 
-              : undefined,
+            groupId: member.groupId,
+            name: member.name,
+            phone: member.phone ?? undefined,
             birthday:
               memberBirthdayValue !== null && memberBirthdayValue !== undefined
                 ? formatDateOnlyFromUTC(memberBirthdayValue)
                 : "",
-            photoUrl: member.getDataValue("photoUrl") !== null && member.getDataValue("photoUrl") !== undefined
-              ? member.getDataValue("photoUrl") || member.photoUrl
-              : undefined,
+            photoUrl: member.photoUrl ?? undefined,
             createdAt: member.createdAt,
             updatedAt: member.updatedAt
           }
@@ -263,13 +262,12 @@ export const createPayment = async (
   } as unknown as Payment);
 
   // Obtener valores raw usando getDataValue() para evitar shadowing de Sequelize
-  const birthdayEventIdValue = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
-  const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
-  const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
-  const amountValue = payment.getDataValue("amount") || payment.amount;
-  const proofUrlValue = payment.getDataValue("proofUrl") || payment.proofUrl;
+    const birthdayEventIdValue = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+    const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
+    const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
+    const amountValue = payment.getDataValue("amount") || payment.amount;
 
-  return {
+    return {
     id: payment.id,
     birthdayEventId: birthdayEventIdValue || 0,
     memberId: memberIdValue || 0,
@@ -278,7 +276,7 @@ export const createPayment = async (
       datePaidValue !== null && datePaidValue !== undefined
         ? formatDateOnlyFromUTC(datePaidValue)
         : paymentData.datePaid, // Fallback al valor original
-    proofUrl: proofUrlValue !== null && proofUrlValue !== undefined ? proofUrlValue : undefined,
+    proofUrl: payment.proofUrl ?? undefined,
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt
   };
@@ -316,7 +314,7 @@ export const getPaymentById = async (
     ]
   });
 
-  if (!payment || !payment.birthdayEvent) {
+  if (!payment?.birthdayEvent) {
     const error = new Error("Pago no encontrado");
     error.name = "NotFoundError";
     throw error;
@@ -327,7 +325,6 @@ export const getPaymentById = async (
   const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
   const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
   const amountValue = payment.getDataValue("amount") || payment.amount;
-  const proofUrlValue = payment.getDataValue("proofUrl") || payment.proofUrl;
   const memberBirthdayValue = payment.member
     ? payment.member.getDataValue("birthday") || payment.member.birthday
     : null;
@@ -341,7 +338,7 @@ export const getPaymentById = async (
       datePaidValue !== null && datePaidValue !== undefined
         ? formatDateOnlyFromUTC(datePaidValue)
         : "",
-    proofUrl: proofUrlValue !== null && proofUrlValue !== undefined ? proofUrlValue : undefined,
+    proofUrl: payment.proofUrl ?? undefined,
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt,
     member: payment.member
@@ -392,7 +389,7 @@ export const updatePayment = async (
     ]
   });
 
-  if (!payment || !payment.birthdayEvent) {
+  if (!payment?.birthdayEvent) {
     const error = new Error("Pago no encontrado");
     error.name = "NotFoundError";
     throw error;
@@ -407,7 +404,7 @@ export const updatePayment = async (
     payment.datePaid = paymentData.datePaid as unknown as Date;
   }
   if (paymentData.proofUrl !== undefined) {
-    payment.proofUrl = paymentData.proofUrl || undefined;
+    payment.proofUrl = paymentData.proofUrl || null;
   }
 
   await payment.save();
@@ -479,7 +476,7 @@ export const deletePayment = async (
     ]
   });
 
-  if (!payment || !payment.birthdayEvent) {
+  if (!payment?.birthdayEvent) {
     const error = new Error("Pago no encontrado");
     error.name = "NotFoundError";
     throw error;
@@ -488,3 +485,130 @@ export const deletePayment = async (
   await payment.destroy();
 };
 
+/**
+ * Obtiene TODOS los pagos de un grupo con información completa
+ * Endpoint optimizado para reducir peticiones desde el frontend
+ * @param groupId - ID del grupo
+ * @param userId - ID del usuario autenticado
+ * @returns Lista de todos los pagos del grupo con información del evento y miembro
+ * @throws Error si el grupo no existe o no pertenece al usuario
+ */
+export const getAllGroupPayments = async (
+  groupId: number,
+  userId: number
+): Promise<GroupPaymentsListResponse> => {
+  // Verificar que el grupo pertenezca al usuario
+  const group = await Group.findOne({
+    where: { id: groupId, userId }
+  });
+
+  if (!group) {
+    const error = new Error("Grupo no encontrado");
+    error.name = "NotFoundError";
+    throw error;
+  }
+
+  // Obtener todos los eventos del grupo
+  const events = await BirthdayEvent.findAll({
+    where: { groupId },
+    attributes: ["id", "memberId", "birthdayDate", "expectedAmount"]
+  });
+
+  if (events.length === 0) {
+    return {
+      groupId,
+      groupName: group.getDataValue("name") || group.name,
+      totalPayments: 0,
+      totalPaid: 0,
+      payments: []
+    };
+  }
+
+  const eventIds = events.map(e => e.id);
+
+  // Obtener todos los pagos de estos eventos
+  const payments = await Payment.findAll({
+    where: { birthdayEventId: eventIds },
+    order: [["datePaid", "DESC"]]
+  });
+
+  // Cargar todos los miembros del grupo
+  const members = await Member.findAll({
+    where: { groupId }
+  });
+
+  // Crear maps para acceso rápido
+  const eventsMap = new Map(events.map(e => [e.id, e]));
+  const membersMap = new Map(members.map(m => [m.id, m]));
+
+  // Construir respuesta con información completa
+  const paymentResponses: GroupPaymentResponse[] = payments.map((payment) => {
+    // Obtener valores usando getDataValue()
+    const birthdayEventIdValue = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+    const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
+    const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
+    const amountValue = payment.getDataValue("amount") || payment.amount;
+
+    // Obtener el evento y miembro del pago
+    const event = eventsMap.get(birthdayEventIdValue);
+    const paymentMember = membersMap.get(memberIdValue);
+
+    // Obtener el miembro del cumpleaños (del evento)
+    const eventMemberIdValue = event?.getDataValue("memberId") || event?.memberId;
+    const birthdayMember = membersMap.get(eventMemberIdValue || 0);
+
+    return {
+      id: payment.id,
+      birthdayEventId: birthdayEventIdValue || 0,
+      memberId: memberIdValue || 0,
+      amount: amountValue !== null && amountValue !== undefined ? Number(amountValue) : 0,
+      datePaid:
+        datePaidValue !== null && datePaidValue !== undefined
+          ? formatDateOnlyFromUTC(datePaidValue)
+          : "",
+      proofUrl: payment.proofUrl ?? undefined,
+      createdAt: payment.createdAt,
+      updatedAt: payment.updatedAt,
+      member: paymentMember
+          ? {
+            id: paymentMember.id,
+            groupId: paymentMember.groupId,
+            name: paymentMember.name,
+            phone: paymentMember.phone ?? undefined,
+            birthday: paymentMember.birthday
+              ? formatDateOnlyFromUTC(paymentMember.birthday)
+              : "",
+            photoUrl: paymentMember.photoUrl ?? undefined,
+            createdAt: paymentMember.createdAt,
+            updatedAt: paymentMember.updatedAt
+          }
+        : undefined,
+      event: {
+        id: event?.id || 0,
+        birthdayDate:
+          event?.getDataValue("birthdayDate") !== null &&
+          event?.getDataValue("birthdayDate") !== undefined
+            ? formatDateOnlyFromUTC(event.getDataValue("birthdayDate") || event.birthdayDate)
+            : "",
+        expectedAmount:
+          event?.getDataValue("expectedAmount") !== null &&
+          event?.getDataValue("expectedAmount") !== undefined
+            ? Number(event.getDataValue("expectedAmount") || event.expectedAmount)
+            : 0,
+        memberId: eventMemberIdValue || 0,
+        memberName: birthdayMember?.getDataValue("name") || birthdayMember?.name || ""
+      }
+    };
+  });
+
+  // Calcular total pagado
+  const totalPaid = paymentResponses.reduce((sum, p) => sum + p.amount, 0);
+
+  return {
+    groupId,
+    groupName: group.getDataValue("name") || group.name,
+    totalPayments: paymentResponses.length,
+    totalPaid: Number(totalPaid.toFixed(2)),
+    payments: paymentResponses
+  };
+};

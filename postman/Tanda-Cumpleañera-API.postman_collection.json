@@ -511,6 +511,32 @@
           "response": []
         },
         {
+          "name": "Get All Group Payments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{auth_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/groups/:groupId/payments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "groups", ":groupId", "payments"],
+              "variable": [
+                {
+                  "key": "groupId",
+                  "value": "{{group_id}}"
+                }
+              ]
+            },
+            "description": "Obtiene TODOS los pagos de un grupo con información completa del evento, miembro que pagó y miembro del cumpleaños.\n\n**Ventajas:**\n- Una sola petición para obtener todos los pagos\n- Incluye información del evento\n- Incluye información del miembro que pagó\n- Incluye información del cumpleañero\n- Optimizado para vistas generales del grupo"
+          },
+          "response": []
+        },
+        {
           "name": "Create Payment",
           "event": [
             {

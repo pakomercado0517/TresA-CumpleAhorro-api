@@ -7,14 +7,14 @@ import {
   forgotPassword,
   resetPasswordController
 } from "../controllers/auth.controller";
+import { authRateLimiter } from "../middlewares/rate-limit.middleware";
+import { validate } from "../middlewares/validation.middleware";
 import {
   validateRegister,
   validateLogin,
   validateForgotPassword,
   validateResetPassword
 } from "../validators/auth.validator";
-import { validate } from "../middlewares/validation.middleware";
-import { authRateLimiter } from "../middlewares/rate-limit.middleware";
 
 const router: Router = Router();
 
@@ -66,4 +66,3 @@ router.post(
 );
 
 export default router;
-

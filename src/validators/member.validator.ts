@@ -1,5 +1,5 @@
-import { body, param } from "express-validator";
 import { isValid, parseISO } from "date-fns";
+import { body, param } from "express-validator";
 
 /**
  * Validaciones para crear un miembro
@@ -73,7 +73,7 @@ export const validateUpdateMember = [
     .isISO8601()
     .withMessage("La fecha debe estar en formato ISO (yyyy-MM-dd)")
     .custom((value) => {
-      if (!value) return true;
+      if (!value) {return true;}
       const date = parseISO(value);
       if (!isValid(date)) {
         throw new Error("La fecha de cumpleaños no es válida");
@@ -119,4 +119,3 @@ export const validateMemberId = [
     .withMessage("El ID del miembro debe ser un número entero positivo")
     .toInt()
 ];
-

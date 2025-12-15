@@ -5,7 +5,8 @@ import {
   createPayment,
   getPaymentById,
   updatePayment,
-  deletePayment
+  deletePayment,
+  getAllGroupPayments
 } from "../services/payment.service";
 import { CreatePaymentDto, UpdatePaymentDto } from "../types/payment.types";
 
@@ -267,3 +268,50 @@ export const remove = async (req: Request<{ id: string }>, res: Response): Promi
   }
 };
 
+/**
+ * Controller para listar TODOS los pagos de un grupo
+ * Endpoint optimizado que devuelve información completa de pagos, eventos y miembros
+ */
+export const listAllGroupPayments = async (
+  req: Request<{ groupId: string }>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        error: "Usuario no autenticado"
+      });
+      return;
+    }
+
+    const groupId = parseInt(req.params.groupId, 10);
+
+    if (isNaN(groupId)) {
+      res.status(400).json({
+        error: "ID de grupo inválido"
+      });
+      return;
+    }
+
+    const result = await getAllGroupPayments(groupId, userId);
+
+    res.status(200).json({
+      message: "Pagos del grupo obtenidos exitosamente",
+      ...result
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({
+        error: error.message
+      });
+      return;
+    }
+
+    console.error("Error al listar pagos del grupo:", error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};

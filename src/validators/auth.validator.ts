@@ -96,4 +96,3 @@ export const validateVerifyEmail = [
     .isString()
     .withMessage("El token debe ser una cadena de texto")
 ];
-

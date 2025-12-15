@@ -250,4 +250,3 @@ export const remove = async (req: Request<{ id: string }>, res: Response): Promi
     });
   }
 };
-

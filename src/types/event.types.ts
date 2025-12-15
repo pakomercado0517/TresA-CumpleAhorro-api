@@ -16,4 +16,3 @@ export interface GenerateEventsResponse {
   eventsCreated: number;
   events: BirthdayEventResponse[];
 }
-

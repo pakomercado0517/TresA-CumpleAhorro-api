@@ -29,14 +29,14 @@ export class Payment extends Model<Payment> {
     type: DataType.INTEGER,
     allowNull: false
   })
-  birthdayEventId!: number;
+  declare birthdayEventId: number;
 
   @ForeignKey(() => Member)
   @Column({
     type: DataType.INTEGER,
     allowNull: false
   })
-  memberId!: number;
+  declare memberId: number;
 
   @Column({
     type: DataType.DECIMAL(10, 2),
@@ -46,7 +46,7 @@ export class Payment extends Model<Payment> {
       notNull: true
     }
   })
-  amount!: number;
+  declare amount: number;
 
   @Column({
     type: DataType.DATEONLY,
@@ -56,7 +56,7 @@ export class Payment extends Model<Payment> {
       isDate: true
     }
   })
-  datePaid!: Date;
+  declare datePaid: Date;
 
   @Column({
     type: DataType.STRING,
@@ -65,7 +65,7 @@ export class Payment extends Model<Payment> {
       isUrl: true
     }
   })
-  proofUrl?: string;
+  declare proofUrl: string | null;
 
   @CreatedAt
   declare createdAt: Date;
@@ -80,4 +80,3 @@ export class Payment extends Model<Payment> {
   @BelongsTo(() => Member)
   member!: Member;
 }
-

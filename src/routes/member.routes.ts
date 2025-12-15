@@ -7,14 +7,14 @@ import {
   update,
   remove
 } from "../controllers/member.controller";
+import { authenticate } from "../middlewares/auth.middleware";
+import { validate } from "../middlewares/validation.middleware";
 import {
   validateCreateMember,
   validateUpdateMember,
   validateGroupId,
   validateMemberId
 } from "../validators/member.validator";
-import { validate } from "../middlewares/validation.middleware";
-import { authenticate } from "../middlewares/auth.middleware";
 
 const router: Router = Router();
 
@@ -63,4 +63,3 @@ router.put("/members/:id", validateMemberId, validateUpdateMember, validate, upd
 router.delete("/members/:id", validateMemberId, validate, remove);
 
 export default router;
-

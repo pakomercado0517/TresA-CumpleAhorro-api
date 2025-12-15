@@ -42,3 +42,20 @@ export interface PaymentsListResponse {
   summary: PaymentSummary;
 }
 
+export interface GroupPaymentResponse extends PaymentResponse {
+  event: {
+    id: number;
+    birthdayDate: string;
+    expectedAmount: number;
+    memberId: number;
+    memberName: string;
+  };
+}
+
+export interface GroupPaymentsListResponse {
+  groupId: number;
+  groupName: string;
+  totalPayments: number;
+  totalPaid: number;
+  payments: GroupPaymentResponse[];
+}

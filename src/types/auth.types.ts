@@ -36,4 +36,3 @@ export interface ResetPasswordDto {
 export interface VerifyEmailDto {
   token: string;
 }
-

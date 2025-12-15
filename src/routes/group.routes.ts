@@ -7,13 +7,14 @@ import {
   update,
   remove
 } from "../controllers/group.controller";
+import { listAllGroupPayments } from "../controllers/payment.controller";
+import { authenticate } from "../middlewares/auth.middleware";
+import { validate } from "../middlewares/validation.middleware";
 import {
   validateCreateGroup,
   validateUpdateGroup,
   validateGroupId
 } from "../validators/group.validator";
-import { validate } from "../middlewares/validation.middleware";
-import { authenticate } from "../middlewares/auth.middleware";
 
 const router: Router = Router();
 
@@ -55,5 +56,11 @@ router.put("/:id", validateGroupId, validateUpdateGroup, validate, update);
  */
 router.delete("/:id", validateGroupId, validate, remove);
 
-export default router;
+/**
+ * @route   GET /api/groups/:groupId/payments
+ * @desc    Obtener TODOS los pagos de un grupo con información completa
+ * @access  Private
+ */
+router.get("/:groupId/payments", listAllGroupPayments);
 
+export default router;

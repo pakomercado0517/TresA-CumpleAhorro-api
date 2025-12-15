@@ -1,5 +1,5 @@
-import { body, param } from "express-validator";
 import { isValid, parseISO } from "date-fns";
+import { body, param } from "express-validator";
 
 /**
  * Validaciones para crear un pago
@@ -65,7 +65,7 @@ export const validateUpdatePayment = [
     .isISO8601()
     .withMessage("La fecha debe estar en formato ISO (yyyy-MM-dd)")
     .custom((value) => {
-      if (!value) return true;
+      if (!value) {return true;}
       const date = parseISO(value);
       if (!isValid(date)) {
         throw new Error("La fecha de pago no es válida");
@@ -114,4 +114,3 @@ export const validatePaymentId = [
     .withMessage("El ID del pago debe ser un número entero positivo")
     .toInt()
 ];
-

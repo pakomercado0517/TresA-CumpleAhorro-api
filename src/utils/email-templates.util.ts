@@ -1,5 +1,5 @@
-import { EmailTemplateData } from "../types/email.types";
 import { env } from "../config/env.config";
+import { EmailTemplateData } from "../types/email.types";
 
 /**
  * Genera el template HTML para confirmación de cuenta
@@ -183,4 +183,3 @@ export const getPlainTextVersion = (html: string): string => {
     .replace(/&quot;/g, '"')
     .trim();
 };
-

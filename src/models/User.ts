@@ -88,4 +88,3 @@ export class User extends Model<User> {
   @HasMany(() => Group)
   groups!: Group[];
 }
-

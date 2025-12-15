@@ -11,6 +11,7 @@ import { CreateGroupDto, UpdateGroupDto } from "../types/group.types";
 
 /**
  * Controller para listar todos los grupos del usuario autenticado
+ * Soporta query parameters para filtrado y optimización
  */
 export const listGroups = async (req: Request, res: Response): Promise<void> => {
   try {
@@ -23,7 +24,47 @@ export const listGroups = async (req: Request, res: Response): Promise<void> => 
       return;
     }
 
-    const groups = await getUserGroups(userId);
+    // Parsear query parameters
+    const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+    const includeMembers = req.query.includeMembers !== "false"; // true por defecto
+    const includeEvents = req.query.includeEvents !== "false"; // true por defecto
+    const includePayments = req.query.includePayments !== "false"; // true por defecto
+    const paymentsLimit = req.query.paymentsLimit 
+      ? parseInt(req.query.paymentsLimit as string, 10) 
+      : 10;
+    const year = req.query.year ? parseInt(req.query.year as string, 10) : undefined;
+
+    // Validar límites
+    if (limit !== undefined && (isNaN(limit) || limit <= 0)) {
+      res.status(400).json({
+        error: "El parámetro 'limit' debe ser un número positivo"
+      });
+      return;
+    }
+
+    if (isNaN(paymentsLimit) || paymentsLimit <= 0) {
+      res.status(400).json({
+        error: "El parámetro 'paymentsLimit' debe ser un número positivo"
+      });
+      return;
+    }
+
+    // Validar año
+    if (year !== undefined && (isNaN(year) || year < 1900 || year > 2100)) {
+      res.status(400).json({
+        error: "El parámetro 'year' debe ser un año válido entre 1900 y 2100"
+      });
+      return;
+    }
+
+    const groups = await getUserGroups(userId, {
+      limit,
+      includeMembers,
+      includeEvents,
+      includePayments,
+      paymentsLimit,
+      year
+    });
 
     res.status(200).json({
       message: "Grupos obtenidos exitosamente",

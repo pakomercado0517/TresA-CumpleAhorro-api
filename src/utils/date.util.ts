@@ -236,4 +236,3 @@ export const isValidDate = (date: unknown): date is Date => {
   }
   return false;
 };
-

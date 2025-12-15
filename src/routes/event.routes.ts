@@ -1,9 +1,9 @@
 import { Router } from "express";
 
 import { listEvents, generateEvents, getById } from "../controllers/event.controller";
-import { validateGroupId, validateEventId } from "../validators/event.validator";
-import { validate } from "../middlewares/validation.middleware";
 import { authenticate } from "../middlewares/auth.middleware";
+import { validate } from "../middlewares/validation.middleware";
+import { validateGroupId, validateEventId } from "../validators/event.validator";
 
 const router: Router = Router();
 
@@ -37,4 +37,3 @@ router.post(
 router.get("/events/:eventId", validateEventId, validate, getById);
 
 export default router;
-

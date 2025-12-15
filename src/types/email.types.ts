@@ -23,4 +23,3 @@ export interface EmailTemplateData {
   url?: string;
   expirationTime?: string;
 }
-

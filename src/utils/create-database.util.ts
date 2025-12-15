@@ -50,4 +50,3 @@ export const createDatabaseIfNotExists = async (): Promise<void> => {
     await sequelize.close();
   }
 };
-

@@ -1,11 +1,12 @@
-import { sendEmail } from "./email.service";
+import { env } from "../config/env.config";
 import {
   getAccountConfirmationTemplate,
   getPasswordResetTemplate,
   getNotificationTemplate,
   getPlainTextVersion
 } from "../utils/email-templates.util";
-import { env } from "../config/env.config";
+
+import { sendEmail } from "./email.service";
 
 /**
  * Envía un email de confirmación de cuenta
@@ -97,4 +98,3 @@ export const sendNotificationEmail = async (
 
   return result;
 };
-

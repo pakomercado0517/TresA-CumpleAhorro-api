@@ -41,4 +41,3 @@ export const closeDatabase = async (): Promise<void> => {
     throw error;
   }
 };
-

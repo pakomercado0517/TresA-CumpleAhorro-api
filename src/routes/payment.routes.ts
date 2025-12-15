@@ -7,14 +7,14 @@ import {
   update,
   remove
 } from "../controllers/payment.controller";
+import { authenticate } from "../middlewares/auth.middleware";
+import { validate } from "../middlewares/validation.middleware";
 import {
   validateCreatePayment,
   validateUpdatePayment,
   validateEventId,
   validatePaymentId
 } from "../validators/payment.validator";
-import { validate } from "../middlewares/validation.middleware";
-import { authenticate } from "../middlewares/auth.middleware";
 
 const router: Router = Router();
 
@@ -63,4 +63,3 @@ router.put("/payments/:id", validatePaymentId, validateUpdatePayment, validate, 
 router.delete("/payments/:id", validatePaymentId, validate, remove);
 
 export default router;
-

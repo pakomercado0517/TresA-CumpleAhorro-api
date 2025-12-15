@@ -1,9 +1,10 @@
+import { Op } from "sequelize";
+
 import { BirthdayEvent } from "../models/BirthdayEvent";
-import { Member } from "../models/Member";
 import { Group } from "../models/Group";
+import { Member } from "../models/Member";
 import { BirthdayEventResponse, GenerateEventsResponse } from "../types/event.types";
 import { formatDateOnlyFromUTC } from "../utils/date.util";
-import { Op } from "sequelize";
 
 /**
  * Verifica que un grupo pertenezca al usuario
@@ -80,13 +81,10 @@ export const recalculateGroupEventsExpectedAmount = async (
   groupId: number
 ): Promise<number> => {
   try {
-    console.log(`[recalculateGroupEventsExpectedAmount] Iniciando recalculación para grupo ${groupId}`);
-    
     // Obtener el grupo
     const group = await Group.findByPk(groupId);
     
     if (!group) {
-      console.warn(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId} no encontrado`);
       return 0;
     }
 
@@ -95,15 +93,12 @@ export const recalculateGroupEventsExpectedAmount = async (
       where: { groupId }
     });
 
-    console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: ${members.length} miembros encontrados`);
-
     // Si no hay miembros, actualizar todos los eventos a 0
     if (members.length === 0) {
       const [updatedCount] = await BirthdayEvent.update(
         { expectedAmount: 0 },
         { where: { groupId } }
       );
-      console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: ${updatedCount} eventos actualizados a $0 (sin miembros)`);
       return updatedCount;
     }
 
@@ -111,15 +106,12 @@ export const recalculateGroupEventsExpectedAmount = async (
     const amountPerBirthdayValue = group.getDataValue("amountPerBirthday") || group.amountPerBirthday;
     
     if (!amountPerBirthdayValue || amountPerBirthdayValue <= 0) {
-      console.warn(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: amountPerBirthday inválido: ${amountPerBirthdayValue}`);
       return 0;
     }
 
     // Calcular el nuevo expectedAmount: número de miembros × amountPerBirthday
     // Todos los miembros pagan, incluyendo el cumpleañero
     const newExpectedAmount = members.length * Number(amountPerBirthdayValue);
-    
-    console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: Nuevo expectedAmount = ${members.length} × $${amountPerBirthdayValue} = $${newExpectedAmount}`);
 
     // Actualizar todos los eventos de este grupo
     const [updatedCount] = await BirthdayEvent.update(
@@ -127,7 +119,6 @@ export const recalculateGroupEventsExpectedAmount = async (
       { where: { groupId } }
     );
 
-    console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: ${updatedCount} eventos actualizados exitosamente`);
     return updatedCount;
   } catch (error) {
     console.error(`[recalculateGroupEventsExpectedAmount] Error en grupo ${groupId}:`, error);
@@ -150,7 +141,6 @@ export const getGroupEvents = async (
 
   // IMPORTANTE: Recalcular expectedAmount antes de devolver los eventos
   // para asegurar que reflejen el número actual de miembros
-  console.log(`[getGroupEvents] Recalculando expectedAmount para grupo ${groupId} antes de consultar`);
   await recalculateGroupEventsExpectedAmount(groupId);
   
   const events = await BirthdayEvent.findAll({
@@ -376,7 +366,6 @@ export const getEventById = async (
   // para asegurar que refleje el número actual de miembros
   const groupIdValue = event.getDataValue("groupId") || event.groupId;
   if (groupIdValue) {
-    console.log(`[getEventById] Recalculando expectedAmount para grupo ${groupIdValue}`);
     await recalculateGroupEventsExpectedAmount(groupIdValue);
     
     // Volver a consultar el evento para obtener el expectedAmount actualizado
@@ -442,4 +431,3 @@ export const getEventById = async (
 
   return response;
 };
-

@@ -10,8 +10,8 @@ import {
   UpdatedAt
 } from "sequelize-typescript";
 
-import { Member } from "./Member";
 import { Group } from "./Group";
+import { Member } from "./Member";
 import { Payment } from "./Payment";
 
 @Table({
@@ -31,14 +31,14 @@ export class BirthdayEvent extends Model<BirthdayEvent> {
     type: DataType.INTEGER,
     allowNull: false
   })
-  memberId!: number;
+  declare memberId: number;
 
   @ForeignKey(() => Group)
   @Column({
     type: DataType.INTEGER,
     allowNull: false
   })
-  groupId!: number;
+  declare groupId: number;
 
   @Column({
     type: DataType.DATEONLY,
@@ -48,7 +48,7 @@ export class BirthdayEvent extends Model<BirthdayEvent> {
       isDate: true
     }
   })
-  birthdayDate!: Date;
+  declare birthdayDate: Date;
 
   @Column({
     type: DataType.DECIMAL(10, 2),
@@ -58,7 +58,7 @@ export class BirthdayEvent extends Model<BirthdayEvent> {
       notNull: true
     }
   })
-  expectedAmount!: number;
+  declare expectedAmount: number;
 
   @CreatedAt
   declare createdAt: Date;
@@ -76,4 +76,3 @@ export class BirthdayEvent extends Model<BirthdayEvent> {
   @HasMany(() => Payment)
   payments!: Payment[];
 }
-

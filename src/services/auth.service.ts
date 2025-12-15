@@ -14,6 +14,7 @@ import {
   generatePasswordResetToken,
   verifySpecialToken
 } from "../utils/jwt.util";
+
 import { sendAccountConfirmationEmail, sendPasswordResetEmail } from "./email-helper.service";
 
 /**
