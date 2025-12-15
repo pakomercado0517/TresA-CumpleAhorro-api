@@ -20,6 +20,15 @@ module.exports = {
       return;
     }
 
+    // Contar miembros por grupo para calcular expectedAmount correctamente
+    const memberCountByGroup = {};
+    for (const member of members) {
+      if (!memberCountByGroup[member.groupId]) {
+        memberCountByGroup[member.groupId] = 0;
+      }
+      memberCountByGroup[member.groupId]++;
+    }
+
     // Obtener el año actual
     const currentYear = new Date().getFullYear();
 
@@ -27,18 +36,24 @@ module.exports = {
 
     for (const member of members) {
       // Ajustar el cumpleaños al año actual
-      const birthdayDate = new Date(member.birthday);
-      const birthdayThisYear = new Date(currentYear, birthdayDate.getMonth(), birthdayDate.getDate());
+      // IMPORTANTE: Para DATEONLY, NO usar conversión de timezone
+      // Extraer mes y día del birthday y crear fecha UTC
+      const birthdayString = String(member.birthday);
+      const [, month, day] = birthdayString.split(/[-T]/); // Soporta "YYYY-MM-DD" o "YYYY-MM-DDTHH:MM:SS"
+      
+      // Crear fecha directamente en formato UTC sin conversión de timezone
+      const eventDate = `${currentYear}-${month}-${day}`;
 
-      // Solo crear eventos para cumpleaños que aún no han pasado este año
-      // o crear algunos eventos de ejemplo (puedes ajustar esta lógica)
-      const eventDate = birthdayThisYear.toISOString().split("T")[0];
+      // Calcular expectedAmount: número de miembros × amountPerBirthday
+      // Todos los miembros pagan, incluyendo el cumpleañero
+      const membersInGroup = memberCountByGroup[member.groupId] || 1;
+      const expectedAmount = membersInGroup * parseFloat(member.amountPerBirthday);
 
       events.push({
         memberId: member.memberId,
         groupId: member.groupId,
         birthdayDate: eventDate,
-        expectedAmount: parseFloat(member.amountPerBirthday),
+        expectedAmount,
         createdAt: new Date(),
         updatedAt: new Date()
       });

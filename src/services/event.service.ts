@@ -2,8 +2,7 @@ import { BirthdayEvent } from "../models/BirthdayEvent";
 import { Member } from "../models/Member";
 import { Group } from "../models/Group";
 import { BirthdayEventResponse, GenerateEventsResponse } from "../types/event.types";
-import { formatDateOnlyFromUTC, parseDateOnlyToUTC, convertUTCToUserDate } from "../utils/date.util";
-import { format, parseISO, isValid } from "date-fns";
+import { formatDateOnlyFromUTC } from "../utils/date.util";
 import { Op } from "sequelize";
 
 /**
@@ -37,9 +36,9 @@ const verifyGroupOwnership = async (
  * Simplemente extraemos mes y día, y creamos la fecha con el año actual.
  * 
  * @param birthday - Fecha de cumpleaños (Date o string "yyyy-MM-dd" de Sequelize)
- * @returns Fecha con el año actual en UTC (medianoche)
+ * @returns String en formato "YYYY-MM-DD" con el año actual
  */
-const adjustBirthdayToCurrentYear = (birthday: Date | string): Date => {
+const adjustBirthdayToCurrentYear = (birthday: Date | string): string => {
   let birthdayString: string;
   
   // Convertir a string sin importar el tipo
@@ -65,11 +64,75 @@ const adjustBirthdayToCurrentYear = (birthday: Date | string): Date => {
   const [, month, day] = birthdayString.split("-");
   
   // Crear fecha con el año actual, preservando mes y día
+  // Para DATEONLY, devolver string directamente, NO Date object
   const currentYear = new Date().getFullYear();
-  const birthdayThisYear = `${currentYear}-${month}-${day}`;
-  
-  // Convertir a Date UTC sin conversión de timezone
-  return parseDateOnlyToUTC(birthdayThisYear);
+  return `${currentYear}-${month}-${day}`;
+};
+
+/**
+ * Recalcula el expectedAmount de todos los eventos de un grupo
+ * basado en el número actual de miembros y el amountPerBirthday
+ * 
+ * @param groupId - ID del grupo
+ * @returns Número de eventos actualizados
+ */
+export const recalculateGroupEventsExpectedAmount = async (
+  groupId: number
+): Promise<number> => {
+  try {
+    console.log(`[recalculateGroupEventsExpectedAmount] Iniciando recalculación para grupo ${groupId}`);
+    
+    // Obtener el grupo
+    const group = await Group.findByPk(groupId);
+    
+    if (!group) {
+      console.warn(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId} no encontrado`);
+      return 0;
+    }
+
+    // Obtener todos los miembros del grupo
+    const members = await Member.findAll({
+      where: { groupId }
+    });
+
+    console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: ${members.length} miembros encontrados`);
+
+    // Si no hay miembros, actualizar todos los eventos a 0
+    if (members.length === 0) {
+      const [updatedCount] = await BirthdayEvent.update(
+        { expectedAmount: 0 },
+        { where: { groupId } }
+      );
+      console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: ${updatedCount} eventos actualizados a $0 (sin miembros)`);
+      return updatedCount;
+    }
+
+    // Obtener amountPerBirthday del grupo
+    const amountPerBirthdayValue = group.getDataValue("amountPerBirthday") || group.amountPerBirthday;
+    
+    if (!amountPerBirthdayValue || amountPerBirthdayValue <= 0) {
+      console.warn(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: amountPerBirthday inválido: ${amountPerBirthdayValue}`);
+      return 0;
+    }
+
+    // Calcular el nuevo expectedAmount: número de miembros × amountPerBirthday
+    // Todos los miembros pagan, incluyendo el cumpleañero
+    const newExpectedAmount = members.length * Number(amountPerBirthdayValue);
+    
+    console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: Nuevo expectedAmount = ${members.length} × $${amountPerBirthdayValue} = $${newExpectedAmount}`);
+
+    // Actualizar todos los eventos de este grupo
+    const [updatedCount] = await BirthdayEvent.update(
+      { expectedAmount: newExpectedAmount },
+      { where: { groupId } }
+    );
+
+    console.log(`[recalculateGroupEventsExpectedAmount] Grupo ${groupId}: ${updatedCount} eventos actualizados exitosamente`);
+    return updatedCount;
+  } catch (error) {
+    console.error(`[recalculateGroupEventsExpectedAmount] Error en grupo ${groupId}:`, error);
+    throw error;
+  }
 };
 
 /**
@@ -85,6 +148,11 @@ export const getGroupEvents = async (
 ): Promise<BirthdayEventResponse[]> => {
   await verifyGroupOwnership(groupId, userId);
 
+  // IMPORTANTE: Recalcular expectedAmount antes de devolver los eventos
+  // para asegurar que reflejen el número actual de miembros
+  console.log(`[getGroupEvents] Recalculando expectedAmount para grupo ${groupId} antes de consultar`);
+  await recalculateGroupEventsExpectedAmount(groupId);
+  
   const events = await BirthdayEvent.findAll({
     where: { groupId },
     include: [
@@ -188,6 +256,7 @@ export const generateEventsForCurrentYear = async (
   }
 
   // Calcular el monto esperado: número de miembros × monto por cumpleaños
+  // Todos los miembros pagan, incluyendo el cumpleañero
   const expectedAmount = members.length * Number(amountPerBirthdayValue);
   const currentYear = new Date().getFullYear();
   const eventsCreated: BirthdayEventResponse[] = [];
@@ -203,8 +272,8 @@ export const generateEventsForCurrentYear = async (
 
     // Verificar si ya existe un evento para este miembro en este año
     // Buscamos eventos del mismo miembro y grupo cuyo año coincida
-    const yearStart = parseDateOnlyToUTC(`${currentYear}-01-01`);
-    const yearEnd = parseDateOnlyToUTC(`${currentYear}-12-31`);
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
 
     const existingEvent = await BirthdayEvent.findOne({
       where: {
@@ -230,14 +299,11 @@ export const generateEventsForCurrentYear = async (
       const birthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
       
       // Formatear la fecha para la respuesta
-      let birthdayDateFormatted: string;
-      if (birthdayDateValue === null || birthdayDateValue === undefined) {
-        // Si es null/undefined, convertir el Date que ya tenemos a string en zona horaria del usuario
-        const userDate = convertUTCToUserDate(birthdayThisYear);
-        birthdayDateFormatted = format(userDate, "yyyy-MM-dd");
-      } else {
-        birthdayDateFormatted = formatDateOnlyFromUTC(birthdayDateValue);
-      }
+      // IMPORTANTE: Para DATEONLY, NO aplicar conversión de timezone
+      const birthdayDateFormatted =
+        birthdayDateValue !== null && birthdayDateValue !== undefined
+          ? formatDateOnlyFromUTC(birthdayDateValue)
+          : birthdayThisYear; // birthdayThisYear ya es un string "YYYY-MM-DD"
 
       // Obtener información completa del miembro para la respuesta
       const memberBirthdayValue = member.getDataValue("birthday") || member.birthday;
@@ -294,11 +360,8 @@ export const getEventById = async (
       {
         model: Group,
         as: "group",
-        where: { userId }
-      },
-      {
-        model: Member,
-        as: "member"
+        where: { userId },
+        required: true
       }
     ]
   });
@@ -309,10 +372,25 @@ export const getEventById = async (
     throw error;
   }
 
+  // IMPORTANTE: Recalcular expectedAmount antes de devolver el evento
+  // para asegurar que refleje el número actual de miembros
+  const groupIdValue = event.getDataValue("groupId") || event.groupId;
+  if (groupIdValue) {
+    console.log(`[getEventById] Recalculando expectedAmount para grupo ${groupIdValue}`);
+    await recalculateGroupEventsExpectedAmount(groupIdValue);
+    
+    // Volver a consultar el evento para obtener el expectedAmount actualizado
+    // reload() no siempre refleja los cambios inmediatamente
+    const updatedEvent = await BirthdayEvent.findByPk(eventId);
+    if (updatedEvent) {
+      // Copiar los valores actualizados
+      event.expectedAmount = updatedEvent.expectedAmount;
+    }
+  }
+
   // Obtener valores raw de Sequelize para todos los campos
   const birthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
   const memberIdValue = event.getDataValue("memberId") || event.memberId;
-  const groupIdValue = event.getDataValue("groupId") || event.groupId;
   const expectedAmountValue = event.getDataValue("expectedAmount") || event.expectedAmount;
 
   // Construir objeto de respuesta con todos los campos explícitamente
@@ -332,30 +410,34 @@ export const getEventById = async (
     updatedAt: event.updatedAt
   };
 
-  // Si hay información del miembro, incluirla
-  if (event.member) {
-    const memberBirthdayValue = event.member.getDataValue("birthday") || event.member.birthday;
-    const memberNameValue = event.member.getDataValue("name") || event.member.name;
-    const memberPhoneValue = event.member.getDataValue("phone") || event.member.phone;
-    const memberPhotoUrlValue = event.member.getDataValue("photoUrl") || event.member.photoUrl;
+  // Cargar el miembro manualmente
+  if (memberIdValue) {
+    const member = await Member.findByPk(memberIdValue);
+    
+    if (member) {
+      const memberBirthdayValue = member.getDataValue("birthday") || member.birthday;
+      const memberNameValue = member.getDataValue("name") || member.name;
+      const memberPhoneValue = member.getDataValue("phone") || member.phone;
+      const memberPhotoUrlValue = member.getDataValue("photoUrl") || member.photoUrl;
 
-    response.member = {
-      id: event.member.id,
-      groupId: event.member.groupId,
-      name: memberNameValue || "",
-      phone:
-        memberPhoneValue !== null && memberPhoneValue !== undefined ? memberPhoneValue : undefined,
-      birthday:
-        memberBirthdayValue !== null && memberBirthdayValue !== undefined
-          ? formatDateOnlyFromUTC(memberBirthdayValue)
-          : "",
-      photoUrl:
-        memberPhotoUrlValue !== null && memberPhotoUrlValue !== undefined
-          ? memberPhotoUrlValue
-          : undefined,
-      createdAt: event.member.createdAt,
-      updatedAt: event.member.updatedAt
-    };
+      response.member = {
+        id: member.id,
+        groupId: member.groupId,
+        name: memberNameValue || "",
+        phone:
+          memberPhoneValue !== null && memberPhoneValue !== undefined ? memberPhoneValue : undefined,
+        birthday:
+          memberBirthdayValue !== null && memberBirthdayValue !== undefined
+            ? formatDateOnlyFromUTC(memberBirthdayValue)
+            : "",
+        photoUrl:
+          memberPhotoUrlValue !== null && memberPhotoUrlValue !== undefined
+            ? memberPhotoUrlValue
+            : undefined,
+        createdAt: member.createdAt,
+        updatedAt: member.updatedAt
+      };
+    }
   }
 
   return response;

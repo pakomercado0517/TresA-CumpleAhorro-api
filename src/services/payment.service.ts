@@ -9,7 +9,8 @@ import {
   PaymentsListResponse,
   PaymentSummary
 } from "../types/payment.types";
-import { parseDateOnlyToUTC, formatDateOnlyFromUTC } from "../utils/date.util";
+import { formatDateOnlyFromUTC } from "../utils/date.util";
+import { recalculateGroupEventsExpectedAmount } from "./event.service";
 import { Op } from "sequelize";
 
 /**
@@ -76,10 +77,12 @@ const calculatePaymentSummary = (
   payments: Payment[],
   expectedAmount: number
 ): PaymentSummary => {
-  const totalPaid = payments.reduce(
-    (sum, payment) => sum + Number(payment.amount),
-    0
-  );
+  // Usar getDataValue() para obtener el amount real de cada pago
+  const totalPaid = payments.reduce((sum, payment) => {
+    const amountValue = payment.getDataValue("amount") || payment.amount || 0;
+    return sum + Number(amountValue);
+  }, 0);
+  
   const remaining = expectedAmount - totalPaid;
   const percentageCompleted =
     expectedAmount > 0 ? (totalPaid / expectedAmount) * 100 : 0;
@@ -103,66 +106,99 @@ export const getEventPayments = async (
   eventId: number,
   userId: number
 ): Promise<PaymentsListResponse> => {
-  const event = await verifyEventOwnership(eventId, userId);
+  let event = await verifyEventOwnership(eventId, userId);
+
+  // IMPORTANTE: Recalcular expectedAmount antes de calcular el resumen de pagos
+  // para asegurar que refleje el número actual de miembros
+  // Obtener groupId usando getDataValue() porque el include no carga event.groupId directamente
+  const groupId = event.getDataValue("groupId") || event.groupId || event.group?.id;
+  
+  if (groupId) {
+    await recalculateGroupEventsExpectedAmount(groupId);
+
+    // Volver a consultar el evento para obtener el expectedAmount actualizado
+    // reload() no siempre refleja los cambios inmediatamente
+    const updatedEvent = await BirthdayEvent.findByPk(eventId);
+    if (updatedEvent) {
+      event = updatedEvent;
+    }
+  }
 
   const payments = await Payment.findAll({
     where: { birthdayEventId: eventId },
-    include: [
-      {
-        model: Member,
-        as: "member"
-      }
-    ],
     order: [["datePaid", "DESC"]]
   });
 
+  // Cargar los miembros manualmente para evitar problemas de shadowing
+  const memberIds = payments.map(p => p.getDataValue("memberId") || p.memberId).filter(Boolean);
+  const uniqueMemberIds = [...new Set(memberIds)];
+  
+  const members = await Member.findAll({
+    where: { id: uniqueMemberIds }
+  });
+  
+  const membersMap = new Map(members.map(m => [m.id, m]));
+
   const paymentResponses: PaymentResponse[] = payments.map((payment) => {
-    // Obtener valores crudos de Sequelize
+    // Obtener valores crudos de Sequelize usando getDataValue() para evitar shadowing
+    const birthdayEventIdValue = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+    const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
     const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
-    const memberBirthdayValue = payment.member
-      ? payment.member.getDataValue("birthday") || payment.member.birthday
+    const amountValue = payment.getDataValue("amount") || payment.amount;
+    const proofUrlValue = payment.getDataValue("proofUrl") || payment.proofUrl;
+
+    // Obtener el miembro del map
+    const member = membersMap.get(memberIdValue);
+    const memberBirthdayValue = member
+      ? member.getDataValue("birthday") || member.birthday
       : null;
 
     return {
       id: payment.id,
-      birthdayEventId: payment.birthdayEventId,
-      memberId: payment.memberId,
-      amount: Number(payment.amount),
+      birthdayEventId: birthdayEventIdValue || 0,
+      memberId: memberIdValue || 0,
+      amount: amountValue !== null && amountValue !== undefined ? Number(amountValue) : 0,
       datePaid:
         datePaidValue !== null && datePaidValue !== undefined
           ? formatDateOnlyFromUTC(datePaidValue)
           : "",
-      proofUrl: payment.proofUrl ?? undefined,
+      proofUrl: proofUrlValue !== null && proofUrlValue !== undefined ? proofUrlValue : undefined,
       createdAt: payment.createdAt,
       updatedAt: payment.updatedAt,
-      member: payment.member
+      member: member
         ? {
-            id: payment.member.id,
-            groupId: payment.member.groupId,
-            name: payment.member.name,
-            phone: payment.member.phone ?? undefined,
+            id: member.id,
+            groupId: member.getDataValue("groupId") || member.groupId,
+            name: member.getDataValue("name") || member.name,
+            phone: member.getDataValue("phone") !== null && member.getDataValue("phone") !== undefined 
+              ? member.getDataValue("phone") || member.phone 
+              : undefined,
             birthday:
               memberBirthdayValue !== null && memberBirthdayValue !== undefined
                 ? formatDateOnlyFromUTC(memberBirthdayValue)
                 : "",
-            photoUrl: payment.member.photoUrl ?? undefined,
-            createdAt: payment.member.createdAt,
-            updatedAt: payment.member.updatedAt
+            photoUrl: member.getDataValue("photoUrl") !== null && member.getDataValue("photoUrl") !== undefined
+              ? member.getDataValue("photoUrl") || member.photoUrl
+              : undefined,
+            createdAt: member.createdAt,
+            updatedAt: member.updatedAt
           }
         : undefined
     };
   });
 
-  const summary = calculatePaymentSummary(payments, Number(event.expectedAmount));
+  // Obtener expectedAmount y birthdayDate usando getDataValue()
+  const expectedAmountValue = event.getDataValue("expectedAmount") || event.expectedAmount;
+  const eventBirthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
 
-  // Obtener el birthdayDate del evento
-  const eventBirthdayDateValue =
-    event.getDataValue("birthdayDate") || event.birthdayDate;
+  const summary = calculatePaymentSummary(payments, Number(expectedAmountValue));
 
   return {
     event: {
       id: event.id,
-      expectedAmount: Number(event.expectedAmount),
+      expectedAmount: expectedAmountValue !== null && expectedAmountValue !== undefined 
+        ? Number(expectedAmountValue) 
+        : 0,
       birthdayDate:
         eventBirthdayDateValue !== null && eventBirthdayDateValue !== undefined
           ? formatDateOnlyFromUTC(eventBirthdayDateValue)
@@ -216,30 +252,33 @@ export const createPayment = async (
     throw error;
   }
 
-  // Convertir datePaid de string (yyyy-MM-dd) a UTC
-  const datePaidUTC = parseDateOnlyToUTC(paymentData.datePaid);
-
+  // Para campos DATEONLY, pasar el string directamente sin convertir a Date
+  // Sequelize manejará la fecha correctamente como DATEONLY
   const payment = await Payment.create({
     birthdayEventId: eventId,
     memberId: paymentData.memberId,
     amount: paymentData.amount,
-    datePaid: datePaidUTC,
+    datePaid: paymentData.datePaid, // String "YYYY-MM-DD" directamente
     proofUrl: paymentData.proofUrl
   } as unknown as Payment);
 
-  // Obtener el datePaid del pago creado
+  // Obtener valores raw usando getDataValue() para evitar shadowing de Sequelize
+  const birthdayEventIdValue = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+  const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
   const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
+  const amountValue = payment.getDataValue("amount") || payment.amount;
+  const proofUrlValue = payment.getDataValue("proofUrl") || payment.proofUrl;
 
   return {
     id: payment.id,
-    birthdayEventId: payment.birthdayEventId,
-    memberId: payment.memberId,
-    amount: Number(payment.amount),
+    birthdayEventId: birthdayEventIdValue || 0,
+    memberId: memberIdValue || 0,
+    amount: amountValue !== null && amountValue !== undefined ? Number(amountValue) : 0,
     datePaid:
       datePaidValue !== null && datePaidValue !== undefined
         ? formatDateOnlyFromUTC(datePaidValue)
         : paymentData.datePaid, // Fallback al valor original
-    proofUrl: payment.proofUrl ?? undefined,
+    proofUrl: proofUrlValue !== null && proofUrlValue !== undefined ? proofUrlValue : undefined,
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt
   };
@@ -283,22 +322,26 @@ export const getPaymentById = async (
     throw error;
   }
 
-  // Obtener valores crudos de Sequelize
+  // Obtener valores crudos de Sequelize usando getDataValue() para evitar shadowing
+  const birthdayEventIdValue = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+  const memberIdValue = payment.getDataValue("memberId") || payment.memberId;
   const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
+  const amountValue = payment.getDataValue("amount") || payment.amount;
+  const proofUrlValue = payment.getDataValue("proofUrl") || payment.proofUrl;
   const memberBirthdayValue = payment.member
     ? payment.member.getDataValue("birthday") || payment.member.birthday
     : null;
 
   return {
     id: payment.id,
-    birthdayEventId: payment.birthdayEventId,
-    memberId: payment.memberId,
-    amount: Number(payment.amount),
+    birthdayEventId: birthdayEventIdValue || 0,
+    memberId: memberIdValue || 0,
+    amount: amountValue !== null && amountValue !== undefined ? Number(amountValue) : 0,
     datePaid:
       datePaidValue !== null && datePaidValue !== undefined
         ? formatDateOnlyFromUTC(datePaidValue)
         : "",
-    proofUrl: payment.proofUrl ?? undefined,
+    proofUrl: proofUrlValue !== null && proofUrlValue !== undefined ? proofUrlValue : undefined,
     createdAt: payment.createdAt,
     updatedAt: payment.updatedAt,
     member: payment.member
@@ -360,8 +403,8 @@ export const updatePayment = async (
     payment.amount = paymentData.amount;
   }
   if (paymentData.datePaid !== undefined) {
-    // Convertir datePaid de string (yyyy-MM-dd) a UTC
-    payment.datePaid = parseDateOnlyToUTC(paymentData.datePaid);
+    // Para campos DATEONLY, pasar el string directamente
+    payment.datePaid = paymentData.datePaid as unknown as Date;
   }
   if (paymentData.proofUrl !== undefined) {
     payment.proofUrl = paymentData.proofUrl || undefined;
@@ -374,6 +417,7 @@ export const updatePayment = async (
 
   // Obtener valores crudos de Sequelize
   const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
+  const amountValue = payment.getDataValue("amount") || payment.amount;
   const memberBirthdayValue = member
     ? member.getDataValue("birthday") || member.birthday
     : null;
@@ -382,7 +426,7 @@ export const updatePayment = async (
     id: payment.id,
     birthdayEventId: payment.birthdayEventId,
     memberId: payment.memberId,
-    amount: Number(payment.amount),
+    amount: amountValue !== null && amountValue !== undefined ? Number(amountValue) : 0,
     datePaid:
       datePaidValue !== null && datePaidValue !== undefined
         ? formatDateOnlyFromUTC(datePaidValue)

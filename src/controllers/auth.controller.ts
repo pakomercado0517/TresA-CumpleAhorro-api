@@ -28,11 +28,12 @@ export const register = async (
       password: req.body.password
     };
 
-    const user = await createUser(userData);
+    const { user, token } = await createUser(userData);
 
     res.status(201).json({
       message: "Usuario creado exitosamente",
-      user
+      user,
+      token
     });
   } catch (error) {
     if (error instanceof Error && error.name === "ConflictError") {

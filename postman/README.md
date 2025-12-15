@@ -22,9 +22,21 @@ Esta carpeta contiene la colección de Postman para probar la API de Tanda Cumpl
 2. Verifica que `base_url` esté configurado como `http://localhost:3001`
 3. Si usas otro puerto, actualiza la variable `base_url`
 
-### 3. Variables de Entorno
+### 3. Autenticación Automática
 
-Las siguientes variables se configuran automáticamente:
+La colección está configurada con **autenticación Bearer Token automática**:
+
+- Al hacer **Login** o **Register**, el token se guarda automáticamente en `auth_token`
+- Ambos endpoints (Login y Register) devuelven un `token` en la respuesta
+- Todos los endpoints protegidos **heredan automáticamente** el token de la colección
+- Los endpoints de autenticación (Login/Register) y Health Check están configurados como "No Auth"
+- **No necesitas agregar manualmente el header Authorization** en cada request
+
+> ✨ **Nota:** Al registrarte, recibes automáticamente un token JWT y quedas autenticado sin necesidad de hacer login.
+
+### 4. Variables de Entorno
+
+Las siguientes variables se configuran automáticamente mediante scripts de prueba:
 
 - `auth_token` - Token JWT (se guarda automáticamente después de login/register)
 - `user_id` - ID del usuario autenticado

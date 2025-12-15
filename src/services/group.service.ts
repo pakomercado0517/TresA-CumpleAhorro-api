@@ -1,5 +1,6 @@
 import { Group } from "../models/Group";
 import { CreateGroupDto, UpdateGroupDto, GroupResponse } from "../types/group.types";
+import { recalculateGroupEventsExpectedAmount } from "./event.service";
 
 /**
  * Obtiene todos los grupos de un usuario
@@ -88,12 +89,23 @@ export const getGroupById = async (
     throw error;
   }
 
+  // Obtener valores raw de Sequelize para asegurar que se obtengan correctamente
+  const amountPerBirthdayValue = group.getDataValue("amountPerBirthday");
+  const nameValue = group.getDataValue("name");
+  const descriptionValue = group.getDataValue("description");
+
   return {
     id: group.id,
     userId: group.userId,
-    name: group.name,
-    amountPerBirthday: Number(group.amountPerBirthday),
-    description: group.description ?? undefined,
+    name: nameValue || group.name || "",
+    amountPerBirthday:
+      amountPerBirthdayValue !== null && amountPerBirthdayValue !== undefined
+        ? Number(amountPerBirthdayValue)
+        : Number(group.amountPerBirthday) || 0,
+    description:
+      descriptionValue !== null && descriptionValue !== undefined
+        ? descriptionValue
+        : group.description ?? undefined,
     createdAt: group.createdAt,
     updatedAt: group.updatedAt
   };
@@ -159,6 +171,14 @@ export const updateGroup = async (
 
   // Recargar el grupo para obtener los valores actualizados
   await group.reload();
+
+  // Si se actualizó el amountPerBirthday, recalcular expectedAmount de todos los eventos
+  // IMPORTANTE: Esperar a que termine para garantizar consistencia
+  if (updateData.amountPerBirthday !== undefined) {
+    console.log(`[updateGroup] amountPerBirthday actualizado a $${updateData.amountPerBirthday} para grupo ${groupId}`);
+    const updatedEventsCount = await recalculateGroupEventsExpectedAmount(groupId);
+    console.log(`[updateGroup] ${updatedEventsCount} eventos actualizados en grupo ${groupId}`);
+  }
 
   return {
     id: group.id,

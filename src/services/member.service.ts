@@ -1,7 +1,8 @@
 import { Member } from "../models/Member";
 import { Group } from "../models/Group";
 import { CreateMemberDto, UpdateMemberDto, MemberResponse } from "../types/member.types";
-import { parseDateOnlyToUTC, formatDateOnlyFromUTC } from "../utils/date.util";
+import { formatDateOnlyFromUTC } from "../utils/date.util";
+import { recalculateGroupEventsExpectedAmount } from "./event.service";
 
 /**
  * Verifica que un grupo pertenezca al usuario
@@ -80,16 +81,22 @@ export const createMember = async (
 ): Promise<MemberResponse> => {
   await verifyGroupOwnership(groupId, userId);
 
-  // Convertir birthday de string (yyyy-MM-dd) a UTC
-  const birthdayUTC = parseDateOnlyToUTC(memberData.birthday);
-
+  // Para campos DATEONLY, pasar el string directamente sin convertir a Date
+  // Sequelize manejará la fecha correctamente como DATEONLY
   const member = await Member.create({
     groupId,
     name: memberData.name,
     phone: memberData.phone,
-    birthday: birthdayUTC,
+    birthday: memberData.birthday, // String "YYYY-MM-DD" directamente
     photoUrl: memberData.photoUrl
   } as unknown as Member);
+
+  // Recalcular expectedAmount de todos los eventos del grupo
+  // porque ahora hay un miembro más
+  // IMPORTANTE: Esperar a que termine para garantizar consistencia
+  console.log(`[createMember] Recalculando expectedAmount para grupo ${groupId} después de agregar miembro ${member.id}`);
+  const updatedEventsCount = await recalculateGroupEventsExpectedAmount(groupId);
+  console.log(`[createMember] ${updatedEventsCount} eventos actualizados en grupo ${groupId}`);
 
   // Obtener el birthday como string directamente de Sequelize
   // Sequelize devuelve DATEONLY como string "YYYY-MM-DD"
@@ -206,8 +213,8 @@ export const updateMember = async (
     member.phone = memberData.phone || undefined;
   }
   if (memberData.birthday !== undefined) {
-    // Convertir birthday de string (yyyy-MM-dd) a UTC
-    member.birthday = parseDateOnlyToUTC(memberData.birthday);
+    // Para campos DATEONLY, pasar el string directamente
+    member.birthday = memberData.birthday as unknown as Date;
   }
   if (memberData.photoUrl !== undefined) {
     member.photoUrl = memberData.photoUrl || undefined;
@@ -251,6 +258,16 @@ export const deleteMember = async (memberId: number, userId: number): Promise<vo
     throw error;
   }
 
+  // Obtener groupId antes de eliminar (usar getDataValue para asegurar valor correcto)
+  const groupId = member.getDataValue("groupId") || member.groupId;
+  const memberIdToDelete = member.id;
   await member.destroy();
+
+  // Recalcular expectedAmount de todos los eventos del grupo
+  // porque ahora hay un miembro menos
+  // IMPORTANTE: Esperar a que termine para garantizar consistencia
+  console.log(`[deleteMember] Recalculando expectedAmount para grupo ${groupId} después de eliminar miembro ${memberIdToDelete}`);
+  const updatedEventsCount = await recalculateGroupEventsExpectedAmount(groupId);
+  console.log(`[deleteMember] ${updatedEventsCount} eventos actualizados en grupo ${groupId}`);
 };
 

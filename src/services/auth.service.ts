@@ -19,10 +19,12 @@ import { sendAccountConfirmationEmail, sendPasswordResetEmail } from "./email-he
 /**
  * Crea un nuevo usuario en el sistema
  * @param userData - Datos del usuario a crear
- * @returns Usuario creado sin la contraseña
+ * @returns Usuario creado sin la contraseña y token JWT
  * @throws Error si el email ya existe
  */
-export const createUser = async (userData: RegisterUserDto): Promise<UserResponse> => {
+export const createUser = async (
+  userData: RegisterUserDto
+): Promise<{ user: UserResponse; token: string }> => {
   // Verificar si el email ya existe
   const existingUser = await User.findOne({
     where: { email: userData.email }
@@ -55,14 +57,23 @@ export const createUser = async (userData: RegisterUserDto): Promise<UserRespons
     console.error("Error al enviar email de confirmación:", error);
   });
 
-  // Retornar usuario sin la contraseña
+  // Generar token JWT para autenticación automática
+  const token = generateToken({
+    userId: user.id,
+    email: user.email
+  });
+
+  // Retornar usuario sin la contraseña y token
   return {
-    id: user.id,
-    name: user.name,
-    email: user.email,
-    emailVerified: false,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt
+    user: {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      emailVerified: false,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt
+    },
+    token
   };
 };
 

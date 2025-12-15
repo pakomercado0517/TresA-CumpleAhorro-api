@@ -30,9 +30,12 @@ export const validateCreatePayment = [
         throw new Error("La fecha de pago no es válida");
       }
       // Verificar que no sea una fecha futura
+      // Comparar solo las fechas (YYYY-MM-DD) sin considerar horas/timezone
+      const inputDateStr = value.split("T")[0]; // Obtener solo "YYYY-MM-DD"
       const today = new Date();
-      today.setHours(23, 59, 59, 999); // Permitir el día de hoy
-      if (date > today) {
+      const todayStr = today.toISOString().split("T")[0]; // Obtener solo "YYYY-MM-DD"
+      
+      if (inputDateStr > todayStr) {
         throw new Error("La fecha de pago no puede ser futura");
       }
       return true;
@@ -68,9 +71,12 @@ export const validateUpdatePayment = [
         throw new Error("La fecha de pago no es válida");
       }
       // Verificar que no sea una fecha futura
+      // Comparar solo las fechas (YYYY-MM-DD) sin considerar horas/timezone
+      const inputDateStr = value.split("T")[0]; // Obtener solo "YYYY-MM-DD"
       const today = new Date();
-      today.setHours(23, 59, 59, 999); // Permitir el día de hoy
-      if (date > today) {
+      const todayStr = today.toISOString().split("T")[0]; // Obtener solo "YYYY-MM-DD"
+      
+      if (inputDateStr > todayStr) {
         throw new Error("La fecha de pago no puede ser futura");
       }
       return true;
