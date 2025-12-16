@@ -34,17 +34,19 @@ export const listAllEvents = async (
     const search = req.query.search ? String(req.query.search) : undefined;
     const sortBy = (req.query.sortBy as string) || "birthdayDate";
     const sortOrder = (req.query.sortOrder as string) || "DESC";
-    
+
     // Parsear booleanos de query params (pueden venir como string "true"/"false" o boolean)
     const includeGroupNameValue = req.query.includeGroupName;
-    const includeGroupName = typeof includeGroupNameValue === "string"
-      ? includeGroupNameValue === "true" || includeGroupNameValue === "1"
-      : includeGroupNameValue === true;
-    
+    const includeGroupName =
+      typeof includeGroupNameValue === "string"
+        ? includeGroupNameValue === "true" || includeGroupNameValue === "1"
+        : includeGroupNameValue === true;
+
     const includeTimestampsValue = req.query.includeTimestamps;
-    const includeTimestamps = typeof includeTimestampsValue === "string"
-      ? includeTimestampsValue === "true" || includeTimestampsValue === "1"
-      : includeTimestampsValue === true;
+    const includeTimestamps =
+      typeof includeTimestampsValue === "string"
+        ? includeTimestampsValue === "true" || includeTimestampsValue === "1"
+        : includeTimestampsValue === true;
 
     // Validar parámetros
     if (year !== undefined && (isNaN(year) || year < 1900 || year > 2100)) {
@@ -197,10 +199,7 @@ export const generateEvents = async (
 /**
  * Controller para obtener un evento por ID
  */
-export const getById = async (
-  req: Request<{ eventId: string }>,
-  res: Response
-): Promise<void> => {
+export const getById = async (req: Request<{ eventId: string }>, res: Response): Promise<void> => {
   try {
     const userId = req.user?.userId;
 
