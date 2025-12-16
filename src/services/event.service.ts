@@ -3,7 +3,8 @@ import { Op } from "sequelize";
 import { BirthdayEvent } from "../models/BirthdayEvent";
 import { Group } from "../models/Group";
 import { Member } from "../models/Member";
-import { BirthdayEventResponse, GenerateEventsResponse } from "../types/event.types";
+import { Payment } from "../models/Payment";
+import { BirthdayEventResponse, GenerateEventsResponse, EventListResponse, EventListItem, EventSummary, GetEventsQueryParams, EventDetailResponse } from "../types/event.types";
 import { formatDateOnlyFromUTC } from "../utils/date.util";
 
 /**
@@ -334,16 +335,18 @@ export const generateEventsForCurrentYear = async (
 };
 
 /**
- * Obtiene un evento por ID, verificando que pertenezca a un grupo del usuario
+ * Obtiene un evento por ID con información completa
+ * Incluye grupo, todos los miembros del grupo, pagos y summary
  * @param eventId - ID del evento
  * @param userId - ID del usuario autenticado
- * @returns Evento encontrado con información del miembro
+ * @returns Evento con información completa
  * @throws Error si el evento no existe o no pertenece a un grupo del usuario
  */
 export const getEventById = async (
   eventId: number,
   userId: number
-): Promise<BirthdayEventResponse> => {
+): Promise<EventDetailResponse> => {
+  // Obtener el evento verificando que pertenezca a un grupo del usuario
   const event = await BirthdayEvent.findOne({
     where: { id: eventId },
     include: [
@@ -362,72 +365,411 @@ export const getEventById = async (
     throw error;
   }
 
-  // IMPORTANTE: Recalcular expectedAmount antes de devolver el evento
-  // para asegurar que refleje el número actual de miembros
   const groupIdValue = event.getDataValue("groupId") || event.groupId;
-  if (groupIdValue) {
-    await recalculateGroupEventsExpectedAmount(groupIdValue);
-    
-    // Volver a consultar el evento para obtener el expectedAmount actualizado
-    // reload() no siempre refleja los cambios inmediatamente
-    const updatedEvent = await BirthdayEvent.findByPk(eventId);
-    if (updatedEvent) {
-      // Copiar los valores actualizados
-      event.expectedAmount = updatedEvent.expectedAmount;
-    }
+  if (!groupIdValue) {
+    const error = new Error("Grupo no encontrado para el evento");
+    error.name = "NotFoundError";
+    throw error;
   }
 
-  // Obtener valores raw de Sequelize para todos los campos
-  const birthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
-  const memberIdValue = event.getDataValue("memberId") || event.memberId;
-  const expectedAmountValue = event.getDataValue("expectedAmount") || event.expectedAmount;
+  // IMPORTANTE: Recalcular expectedAmount antes de devolver el evento
+  await recalculateGroupEventsExpectedAmount(groupIdValue);
+  
+  // Volver a consultar el evento para obtener el expectedAmount actualizado
+  const updatedEvent = await BirthdayEvent.findByPk(eventId);
+  if (!updatedEvent) {
+    const error = new Error("Evento no encontrado");
+    error.name = "NotFoundError";
+    throw error;
+  }
 
-  // Construir objeto de respuesta con todos los campos explícitamente
-  const response: BirthdayEventResponse = {
-    id: event.id,
-    memberId: memberIdValue || 0,
-    groupId: groupIdValue || 0,
-    birthdayDate:
-      birthdayDateValue !== null && birthdayDateValue !== undefined
-        ? formatDateOnlyFromUTC(birthdayDateValue)
-        : "",
-    expectedAmount:
-      expectedAmountValue !== null && expectedAmountValue !== undefined
-        ? Number(expectedAmountValue)
-        : 0,
-    createdAt: event.createdAt,
-    updatedAt: event.updatedAt
+  // Obtener el grupo
+  const group = await Group.findByPk(groupIdValue);
+  if (!group) {
+    const error = new Error("Grupo no encontrado");
+    error.name = "NotFoundError";
+    throw error;
+  }
+
+  // Obtener todos los miembros del grupo (no solo los que pagaron)
+  const allMembers = await Member.findAll({
+    where: { groupId: groupIdValue },
+    order: [["createdAt", "DESC"]]
+  });
+
+  // Obtener el miembro del evento (cumpleañero)
+  const memberIdValue = updatedEvent.getDataValue("memberId") || updatedEvent.memberId;
+  const eventMember = allMembers.find(m => m.id === memberIdValue);
+
+  // Obtener todos los pagos del evento
+  const payments = await Payment.findAll({
+    where: { birthdayEventId: eventId },
+    order: [["datePaid", "DESC"]]
+  });
+
+  // Obtener valores del evento
+  const birthdayDateValue = updatedEvent.getDataValue("birthdayDate") || updatedEvent.birthdayDate;
+  const expectedAmountValue = updatedEvent.getDataValue("expectedAmount") || updatedEvent.expectedAmount;
+
+  // Calcular summary
+  const totalPaid = payments.reduce((sum, payment) => {
+    const amountValue = payment.getDataValue("amount") || payment.amount || 0;
+    return sum + Number(amountValue);
+  }, 0);
+
+  const totalExpected = expectedAmountValue !== null && expectedAmountValue !== undefined
+    ? Number(expectedAmountValue)
+    : 0;
+
+  const percentageCompleted = totalExpected > 0
+    ? Number(((totalPaid / totalExpected) * 100).toFixed(2))
+    : 0;
+
+  // Construir respuesta con la nueva estructura
+  const response: EventDetailResponse = {
+    event: {
+      id: updatedEvent.id,
+      memberId: memberIdValue || 0,
+      groupId: groupIdValue,
+      birthdayDate:
+        birthdayDateValue !== null && birthdayDateValue !== undefined
+          ? formatDateOnlyFromUTC(birthdayDateValue)
+          : "",
+      expectedAmount: totalExpected,
+      member: {
+        id: eventMember?.id || 0,
+        name: eventMember ? (eventMember.getDataValue("name") || eventMember.name || "") : "",
+        photoUrl: eventMember
+          ? (eventMember.getDataValue("photoUrl") || eventMember.photoUrl || null)
+          : null
+      }
+    },
+    group: {
+      id: group.id,
+      amountPerBirthday: Number(group.getDataValue("amountPerBirthday") || group.amountPerBirthday || 0)
+    },
+    members: allMembers.map(member => ({
+      id: member.id,
+      name: member.getDataValue("name") || member.name || "",
+      photoUrl: member.getDataValue("photoUrl") || member.photoUrl || null
+    })),
+    payments: payments.map(payment => {
+      const datePaidValue = payment.getDataValue("datePaid") || payment.datePaid;
+      const amountValue = payment.getDataValue("amount") || payment.amount;
+      
+      return {
+        id: payment.id,
+        memberId: payment.getDataValue("memberId") || payment.memberId || 0,
+        amount: amountValue !== null && amountValue !== undefined ? Number(amountValue) : 0,
+        datePaid:
+          datePaidValue !== null && datePaidValue !== undefined
+            ? formatDateOnlyFromUTC(datePaidValue)
+            : "",
+        proofUrl: payment.getDataValue("proofUrl") || payment.proofUrl || null
+      };
+    }),
+    summary: {
+      totalPaid: Number(totalPaid.toFixed(2)),
+      totalExpected: Number(totalExpected.toFixed(2)),
+      percentageCompleted
+    }
   };
 
-  // Cargar el miembro manualmente
-  if (memberIdValue) {
-    const member = await Member.findByPk(memberIdValue);
-    
-    if (member) {
-      const memberBirthdayValue = member.getDataValue("birthday") || member.birthday;
-      const memberNameValue = member.getDataValue("name") || member.name;
-      const memberPhoneValue = member.getDataValue("phone") || member.phone;
-      const memberPhotoUrlValue = member.getDataValue("photoUrl") || member.photoUrl;
+  return response;
+};
 
-      response.member = {
-        id: member.id,
-        groupId: member.groupId,
-        name: memberNameValue || "",
-        phone:
-          memberPhoneValue !== null && memberPhoneValue !== undefined ? memberPhoneValue : undefined,
-        birthday:
-          memberBirthdayValue !== null && memberBirthdayValue !== undefined
-            ? formatDateOnlyFromUTC(memberBirthdayValue)
-            : "",
-        photoUrl:
-          memberPhotoUrlValue !== null && memberPhotoUrlValue !== undefined
-            ? memberPhotoUrlValue
-            : undefined,
-        createdAt: member.createdAt,
-        updatedAt: member.updatedAt
-      };
+/**
+ * Obtiene todos los eventos del usuario con información completa
+ * Incluye información del grupo y del miembro, con filtros y paginación
+ * @param userId - ID del usuario autenticado
+ * @param options - Opciones de filtrado y paginación
+ * @returns Lista de eventos con información completa
+ */
+export const getUserEvents = async (
+  userId: number,
+  options: GetEventsQueryParams = {}
+): Promise<EventListResponse> => {
+  const {
+    year,
+    cursor,
+    limit = 20,
+    status = "all",
+    search,
+    sortBy = "birthdayDate",
+    sortOrder = "DESC",
+    includeGroupName = false,
+    includeTimestamps = false
+  } = options;
+
+  // Obtener todos los grupos del usuario
+  const userGroups = await Group.findAll({
+    where: { userId },
+    attributes: ["id", "name", "amountPerBirthday"]
+  });
+
+  if (userGroups.length === 0) {
+    return {
+      message: "Eventos obtenidos exitosamente",
+      events: [],
+      summary: {
+        totalEvents: 0,
+        totalExpected: 0,
+        totalPaid: 0,
+        percentageCompleted: 0
+      }
+    };
+  }
+
+  const groupIds = userGroups.map(g => g.id);
+  const groupsMap = new Map(userGroups.map(g => [g.id, g]));
+
+  // Construir query base para eventos
+  const eventWhere: any = {
+    groupId: groupIds
+  };
+
+  // Filtro por año
+  if (year !== undefined) {
+    // Filtrar por año del birthdayDate
+    const startDate = `${year}-01-01`;
+    const endDate = `${year}-12-31`;
+    eventWhere.birthdayDate = {
+      [Op.between]: [startDate, endDate]
+    };
+  }
+
+  // Filtro por cursor (paginación)
+  if (cursor) {
+    const cursorId = parseInt(cursor, 10);
+    if (!isNaN(cursorId)) {
+      // Para cursor pagination, obtener eventos con ID menor/mayor que el cursor
+      // dependiendo del orden
+      if (sortOrder === "DESC") {
+        eventWhere.id = { [Op.lt]: cursorId };
+      } else {
+        eventWhere.id = { [Op.gt]: cursorId };
+      }
     }
   }
 
-  return response;
+  // Obtener todos los eventos que cumplan los filtros
+  const allEvents = await BirthdayEvent.findAll({
+    where: eventWhere
+  });
+
+  if (allEvents.length === 0) {
+    return {
+      message: "Eventos obtenidos exitosamente",
+      events: [],
+      summary: {
+        totalEvents: 0,
+        totalExpected: 0,
+        totalPaid: 0,
+        percentageCompleted: 0
+      }
+    };
+  }
+
+  // Obtener todos los memberIds únicos de los eventos
+  const memberIds = [...new Set(allEvents.map(e => e.getDataValue("memberId") || e.memberId).filter(Boolean))];
+  
+  // Cargar todos los miembros de una vez para evitar N+1 queries
+  const allMembers = memberIds.length > 0
+    ? await Member.findAll({
+        where: { id: memberIds }
+      })
+    : [];
+
+  // Crear map de miembros para acceso rápido
+  const membersMap = new Map(allMembers.map(m => [m.id, m]));
+
+  // Obtener conteo de miembros por grupo para memberCount
+  const memberCountsByGroup = new Map<number, number>();
+  for (const groupId of groupIds) {
+    const count = await Member.count({ where: { groupId } });
+    memberCountsByGroup.set(groupId, count);
+  }
+
+  // Obtener todos los pagos de los eventos
+  const eventIds = allEvents.map(e => e.id);
+  const allPayments = eventIds.length > 0
+    ? await Payment.findAll({
+        where: { birthdayEventId: eventIds }
+      })
+    : [];
+
+  // Agrupar pagos por evento
+  const paymentsByEvent = new Map<number, typeof allPayments>();
+  allPayments.forEach(payment => {
+    const eventId = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+    if (!paymentsByEvent.has(eventId)) {
+      paymentsByEvent.set(eventId, []);
+    }
+    paymentsByEvent.get(eventId)!.push(payment);
+  });
+
+  // Calcular totalPaid para cada evento y construir lista de eventos
+  let eventsList: EventListItem[] = allEvents.map(event => {
+    const eventPayments = paymentsByEvent.get(event.id) || [];
+    const totalPaid = eventPayments.reduce((sum, payment) => {
+      const amount = payment.getDataValue("amount") || payment.amount;
+      return sum + (amount ? Number(amount) : 0);
+    }, 0);
+
+    const group = groupsMap.get(event.getDataValue("groupId") || event.groupId);
+    const eventMemberId = event.getDataValue("memberId") || event.memberId;
+    const member = eventMemberId ? membersMap.get(eventMemberId) : undefined;
+    const memberCount = memberCountsByGroup.get(event.getDataValue("groupId") || event.groupId) || 0;
+
+    const birthdayDateValue = event.getDataValue("birthdayDate") || event.birthdayDate;
+    const memberBirthdayValue = member ? (member.getDataValue("birthday") || member.birthday) : null;
+
+    return {
+      id: event.id,
+      memberId: event.getDataValue("memberId") || event.memberId,
+      groupId: event.getDataValue("groupId") || event.groupId,
+      birthdayDate: birthdayDateValue
+        ? formatDateOnlyFromUTC(birthdayDateValue)
+        : "",
+      expectedAmount: event.getDataValue("expectedAmount") !== null && event.getDataValue("expectedAmount") !== undefined
+        ? Number(event.getDataValue("expectedAmount") || event.expectedAmount)
+        : 0,
+      totalPaid: Number(totalPaid.toFixed(2)),
+      group: {
+        id: group?.id || 0,
+        ...(includeGroupName && group ? { name: group.getDataValue("name") || group.name || "" } : {}),
+        amountPerBirthday: group
+          ? Number(group.getDataValue("amountPerBirthday") || group.amountPerBirthday || 0)
+          : 0,
+        memberCount
+      },
+      member: {
+        id: member?.id || 0,
+        groupId: member ? (member.getDataValue("groupId") || member.groupId) : 0,
+        name: member ? (member.getDataValue("name") || member.name || "") : "",
+        ...(member && member.getDataValue("phone") !== null && member.getDataValue("phone") !== undefined
+          ? { phone: member.getDataValue("phone") || member.phone || undefined }
+          : {}),
+        birthday: memberBirthdayValue
+          ? formatDateOnlyFromUTC(memberBirthdayValue)
+          : "",
+        ...(member && member.getDataValue("photoUrl") !== null && member.getDataValue("photoUrl") !== undefined
+          ? { photoUrl: member.getDataValue("photoUrl") || member.photoUrl || undefined }
+          : {})
+      },
+      ...(includeTimestamps
+        ? {
+            createdAt: event.createdAt.toISOString(),
+            updatedAt: event.updatedAt.toISOString()
+          }
+        : {})
+    };
+  });
+
+  // Aplicar filtro por status
+  if (status !== "all") {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = today.toISOString().split("T")[0];
+
+    eventsList = eventsList.filter(event => {
+      const eventDate = event.birthdayDate;
+      const isCompleted = event.totalPaid >= event.expectedAmount;
+      const isOverdue = eventDate < todayStr && !isCompleted;
+      const isPending = !isCompleted && eventDate >= todayStr;
+
+      switch (status) {
+        case "completed":
+          return isCompleted;
+        case "pending":
+          return isPending;
+        case "overdue":
+          return isOverdue;
+        default:
+          return true;
+      }
+    });
+  }
+
+  // Aplicar filtro de búsqueda
+  if (search) {
+    const searchLower = search.toLowerCase();
+    eventsList = eventsList.filter(event => {
+      const memberName = event.member.name.toLowerCase();
+      const groupName = event.group.name?.toLowerCase() || "";
+      return memberName.includes(searchLower) || groupName.includes(searchLower);
+    });
+  }
+
+  // Aplicar ordenamiento
+  eventsList.sort((a, b) => {
+    let aValue: any;
+    let bValue: any;
+
+    switch (sortBy) {
+      case "birthdayDate":
+        aValue = a.birthdayDate;
+        bValue = b.birthdayDate;
+        break;
+      case "createdAt":
+        aValue = a.createdAt || "";
+        bValue = b.createdAt || "";
+        break;
+      case "expectedAmount":
+        aValue = a.expectedAmount;
+        bValue = b.expectedAmount;
+        break;
+      case "totalPaid":
+        aValue = a.totalPaid;
+        bValue = b.totalPaid;
+        break;
+      default:
+        aValue = a.birthdayDate;
+        bValue = b.birthdayDate;
+    }
+
+    if (sortBy === "birthdayDate" || sortBy === "createdAt") {
+      // Comparación de strings (fechas)
+      const comparison = aValue.localeCompare(bValue);
+      return sortOrder === "DESC" ? -comparison : comparison;
+    } else {
+      // Comparación numérica
+      const comparison = aValue - bValue;
+      return sortOrder === "DESC" ? -comparison : comparison;
+    }
+  });
+
+  // Aplicar límite y cursor pagination
+  const limitedEvents = eventsList.slice(0, limit);
+  const hasMore = eventsList.length > limit;
+  const nextCursor = limitedEvents.length > 0 && hasMore
+    ? limitedEvents[limitedEvents.length - 1].id.toString()
+    : undefined;
+
+  // Calcular summary
+  const totalEvents = eventsList.length;
+  const totalExpected = eventsList.reduce((sum, e) => sum + e.expectedAmount, 0);
+  const totalPaid = eventsList.reduce((sum, e) => sum + e.totalPaid, 0);
+  const percentageCompleted = totalExpected > 0
+    ? Number(((totalPaid / totalExpected) * 100).toFixed(2))
+    : 0;
+
+  return {
+    message: "Eventos obtenidos exitosamente",
+    events: limitedEvents,
+    summary: {
+      totalEvents,
+      totalExpected: Number(totalExpected.toFixed(2)),
+      totalPaid: Number(totalPaid.toFixed(2)),
+      percentageCompleted
+    },
+    ...(nextCursor
+      ? {
+          pagination: {
+            cursor: nextCursor,
+            hasMore
+          }
+        }
+      : {})
+  };
 };

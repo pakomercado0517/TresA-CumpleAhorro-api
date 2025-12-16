@@ -63,3 +63,31 @@ export interface GetGroupsQueryParams {
   paymentsLimit?: number;   // Limitar número de pagos recientes (default: 10)
   year?: number;            // Filtrar eventos por año (ej: 2025)
 }
+
+/**
+ * Respuesta optimizada para GET /api/groups
+ * Estructura mínima para reducir el payload
+ */
+export interface GroupOptimizedResponse {
+  id: number;
+  name: string;
+  amountPerBirthday: number;
+  memberCount: number;
+  eventCount: number;
+  totalExpected: number;
+  totalPaid: number;
+  events: Array<{
+    id: number;
+    memberId: number;
+    memberName: string;
+    birthdayDate: string; // "yyyy-MM-dd"
+    expectedAmount: number;
+    totalPaid: number;
+  }>;
+  // Opcional: members[] solo si se necesitan avatares
+  members?: Array<{
+    id: number;
+    name: string;
+    photoUrl?: string;
+  }>;
+}

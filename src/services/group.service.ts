@@ -2,22 +2,22 @@ import { BirthdayEvent } from "../models/BirthdayEvent";
 import { Group } from "../models/Group";
 import { Member } from "../models/Member";
 import { Payment } from "../models/Payment";
-import { CreateGroupDto, UpdateGroupDto, GroupResponse, GroupDetailedResponse, GetGroupsQueryParams } from "../types/group.types";
+import { CreateGroupDto, UpdateGroupDto, GroupResponse, GroupDetailedResponse, GroupOptimizedResponse, GetGroupsQueryParams } from "../types/group.types";
 import { formatDateOnlyFromUTC } from "../utils/date.util";
 
 import { recalculateGroupEventsExpectedAmount } from "./event.service";
 
 /**
- * Obtiene todos los grupos de un usuario con información completa
- * Incluye miembros, eventos, pagos y estadísticas
+ * Obtiene todos los grupos de un usuario con información optimizada
+ * Incluye solo los campos esenciales para reducir el payload
  * @param userId - ID del usuario autenticado
  * @param options - Opciones de filtrado y límites
- * @returns Lista de grupos con información detallada
+ * @returns Lista de grupos con información optimizada
  */
 export const getUserGroups = async (
   userId: number,
   options: GetGroupsQueryParams = {}
-): Promise<GroupDetailedResponse[]> => {
+): Promise<GroupOptimizedResponse[]> => {
   // Valores por defecto
   const {
     limit,
@@ -154,23 +154,22 @@ export const getUserGroups = async (
     // Crear map de miembros para acceso rápido
     const membersMap = new Map(groupMembers.map(m => [m.id, m]));
 
-    // Mapear miembros (solo si se solicita)
+    // Mapear miembros (solo si se solicita) - Estructura optimizada
+    // Solo incluir id, name, photoUrl para avatares
     // Ordenar por fecha de creación DESC (más recientes primero)
-    const members = includeMembers ? groupMembers
-      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .map(member => {
-        const phoneValue = member.phone ?? null;
-        const photoUrlValue = member.photoUrl ?? null;
-        const birthdayValue = member.birthday;
-        
-        return {
-          id: member.id,
-          name: member.name,
-          phone: phoneValue !== null ? phoneValue : undefined,
-          birthday: birthdayValue ? formatDateOnlyFromUTC(birthdayValue) : "",
-          photoUrl: photoUrlValue !== null ? photoUrlValue : undefined
-        };
-      }) : [];
+    const members = includeMembers && groupMembers.length > 0
+      ? groupMembers
+          .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+          .map(member => {
+            const photoUrlValue = member.photoUrl ?? null;
+            
+            return {
+              id: member.id,
+              name: member.name,
+              photoUrl: photoUrlValue !== null ? photoUrlValue : undefined
+            };
+          })
+      : undefined;
 
     // Mapear eventos con información del miembro (solo si se solicita)
     // Ordenar por fecha del evento DESC (más próximos/recientes primero)
@@ -207,74 +206,26 @@ export const getUserGroups = async (
         };
       }) : [];
 
-    // Obtener pagos recientes del grupo (solo si se solicita)
-    let recentPayments: Array<{
-      id: number;
-      memberId: number;
-      memberName: string;
-      birthdayEventId: number;
-      amount: number;
-      datePaid: string;
-    }> = [];
-
-    if (includePayments) {
-      const groupPayments: typeof allPayments = [];
-      groupEvents.forEach(event => {
-        const eventPayments = paymentsByEvent.get(event.id) || [];
-        groupPayments.push(...eventPayments);
-      });
-      
-      // Ordenar por fecha DESC (más recientes primero) y tomar los N más recientes
-      groupPayments.sort((a, b) => {
-        const dateA = a.getDataValue("datePaid") || a.datePaid;
-        const dateB = b.getDataValue("datePaid") || b.datePaid;
-        // Convertir a string para comparación (YYYY-MM-DD)
-        const strA = typeof dateA === 'string' ? dateA : dateA.toISOString().split('T')[0];
-        const strB = typeof dateB === 'string' ? dateB : dateB.toISOString().split('T')[0];
-        return strB.localeCompare(strA); // DESC - más recientes primero
-      });
-
-      recentPayments = groupPayments.slice(0, paymentsLimit).map(payment => {
-        const paymentMemberId = payment.getDataValue("memberId") || payment.memberId;
-        const paymentMember = membersMap.get(paymentMemberId);
-        
-        return {
-          id: payment.id,
-          memberId: paymentMemberId,
-          memberName: paymentMember ? (paymentMember.getDataValue("name") || paymentMember.name) : "",
-          birthdayEventId: payment.getDataValue("birthdayEventId") || payment.birthdayEventId,
-          amount: payment.getDataValue("amount") !== null && payment.getDataValue("amount") !== undefined
-            ? Number(payment.getDataValue("amount") || payment.amount)
-            : 0,
-          datePaid: payment.getDataValue("datePaid") !== null && payment.getDataValue("datePaid") !== undefined
-            ? formatDateOnlyFromUTC(payment.getDataValue("datePaid") || payment.datePaid)
-            : ""
-        };
-      });
-    }
-
-    // Construir respuesta completa
-    return {
+    // Construir respuesta optimizada (estructura mínima)
+    const optimizedResponse: GroupOptimizedResponse = {
       id: group.id,
-      userId: group.userId,
       name: group.getDataValue("name") || group.name || "",
       amountPerBirthday: group.getDataValue("amountPerBirthday") !== null && group.getDataValue("amountPerBirthday") !== undefined
         ? Number(group.getDataValue("amountPerBirthday") || group.amountPerBirthday)
         : 0,
-      description: (() => {
-        const desc = group.getDataValue("description") || group.description;
-        return desc !== null && desc !== undefined ? desc : undefined;
-      })(),
-      createdAt: group.createdAt,
-      updatedAt: group.updatedAt,
       memberCount: groupMembers.length,
       eventCount: groupEvents.length,
       totalExpected: Number(totalExpected.toFixed(2)),
       totalPaid: Number(totalPaid.toFixed(2)),
-      members,
-      events,
-      recentPayments
+      events
     };
+
+    // Incluir members solo si se solicita y hay miembros (para avatares)
+    if (members) {
+      optimizedResponse.members = members;
+    }
+
+    return optimizedResponse;
   });
 };
 

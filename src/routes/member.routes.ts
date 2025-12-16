@@ -1,6 +1,7 @@
 import { Router } from "express";
 
 import {
+  listAllMembers,
   listMembers,
   create,
   getById,
@@ -20,6 +21,14 @@ const router: Router = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authenticate);
+
+/**
+ * @route   GET /api/members
+ * @desc    Listar todos los miembros del usuario
+ * @access  Private
+ * @query   search, month, status, cursor, limit, includePhone, includePhotoUrl, includeSummary
+ */
+router.get("/members", listAllMembers);
 
 /**
  * @route   GET /api/groups/:groupId/members

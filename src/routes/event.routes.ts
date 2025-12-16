@@ -1,6 +1,6 @@
 import { Router } from "express";
 
-import { listEvents, generateEvents, getById } from "../controllers/event.controller";
+import { listAllEvents, listEvents, generateEvents, getById } from "../controllers/event.controller";
 import { authenticate } from "../middlewares/auth.middleware";
 import { validate } from "../middlewares/validation.middleware";
 import { validateGroupId, validateEventId } from "../validators/event.validator";
@@ -9,6 +9,14 @@ const router: Router = Router();
 
 // Todas las rutas requieren autenticación
 router.use(authenticate);
+
+/**
+ * @route   GET /api/events
+ * @desc    Listar todos los eventos del usuario
+ * @access  Private
+ * @query   year, cursor, limit, status, search, sortBy, sortOrder, includeGroupName, includeTimestamps
+ */
+router.get("/events", listAllEvents);
 
 /**
  * @route   GET /api/groups/:groupId/events

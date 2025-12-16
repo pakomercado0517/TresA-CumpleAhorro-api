@@ -5,9 +5,93 @@ import {
   createMember,
   getMemberById,
   updateMember,
-  deleteMember
+  deleteMember,
+  getUserMembers
 } from "../services/member.service";
-import { CreateMemberDto, UpdateMemberDto } from "../types/member.types";
+import { CreateMemberDto, UpdateMemberDto, GetMembersQueryParams } from "../types/member.types";
+
+/**
+ * Controller para listar todos los miembros del usuario
+ * Soporta filtros: search, month, status, cursor
+ */
+export const listAllMembers = async (
+  req: Request<unknown, unknown, unknown, GetMembersQueryParams>,
+  res: Response
+): Promise<void> => {
+  try {
+    const userId = req.user?.userId;
+
+    if (!userId) {
+      res.status(401).json({
+        error: "Usuario no autenticado"
+      });
+      return;
+    }
+
+    // Parsear query parameters
+    const search = req.query.search ? String(req.query.search) : undefined;
+    const month = req.query.month ? parseInt(String(req.query.month), 10) : undefined;
+    const status = (req.query.status as string) || "all";
+    const cursor = req.query.cursor ? String(req.query.cursor) : undefined;
+    const limit = req.query.limit ? parseInt(String(req.query.limit), 10) : 20;
+    
+    // Parsear booleanos
+    const includePhoneValue = req.query.includePhone;
+    const includePhone = typeof includePhoneValue === "string"
+      ? includePhoneValue !== "false" && includePhoneValue !== "0"
+      : includePhoneValue !== false;
+
+    const includePhotoUrlValue = req.query.includePhotoUrl;
+    const includePhotoUrl = typeof includePhotoUrlValue === "string"
+      ? includePhotoUrlValue !== "false" && includePhotoUrlValue !== "0"
+      : includePhotoUrlValue !== false;
+
+    const includeSummaryValue = req.query.includeSummary;
+    const includeSummary = typeof includeSummaryValue === "string"
+      ? includeSummaryValue !== "false" && includeSummaryValue !== "0"
+      : includeSummaryValue !== false;
+
+    // Validar parámetros
+    if (month !== undefined && (isNaN(month) || month < 1 || month > 12)) {
+      res.status(400).json({
+        error: "El parámetro 'month' debe ser un número entre 1 y 12"
+      });
+      return;
+    }
+
+    if (limit !== undefined && (isNaN(limit) || limit <= 0 || limit > 100)) {
+      res.status(400).json({
+        error: "El parámetro 'limit' debe ser un número positivo entre 1 y 100"
+      });
+      return;
+    }
+
+    if (!["all", "active", "pending", "inactive"].includes(status)) {
+      res.status(400).json({
+        error: "El parámetro 'status' debe ser: all, active, pending o inactive"
+      });
+      return;
+    }
+
+    const members = await getUserMembers(userId, {
+      search,
+      month,
+      status: status as "all" | "active" | "pending" | "inactive",
+      cursor,
+      limit,
+      includePhone,
+      includePhotoUrl,
+      includeSummary
+    });
+
+    res.status(200).json(members);
+  } catch (error) {
+    console.error("Error al listar miembros:", error);
+    res.status(500).json({
+      error: "Error interno del servidor"
+    });
+  }
+};
 
 /**
  * Controller para listar todos los miembros de un grupo

@@ -459,29 +459,44 @@ export const deletePayment = async (
   paymentId: number,
   userId: number
 ): Promise<void> => {
-  const payment = await Payment.findOne({
-    where: { id: paymentId },
-    include: [
-      {
-        model: BirthdayEvent,
-        as: "birthdayEvent",
-        include: [
-          {
-            model: Group,
-            as: "group",
-            where: { userId }
-          }
-        ]
-      }
-    ]
-  });
+  // Primero verificar que el pago existe
+  const payment = await Payment.findByPk(paymentId);
 
-  if (!payment?.birthdayEvent) {
+  if (!payment) {
     const error = new Error("Pago no encontrado");
     error.name = "NotFoundError";
     throw error;
   }
 
+  // Obtener el evento del pago
+  const birthdayEventId = payment.getDataValue("birthdayEventId") || payment.birthdayEventId;
+  
+  if (!birthdayEventId) {
+    const error = new Error("No se pudo obtener el evento del pago");
+    error.name = "ValidationError";
+    throw error;
+  }
+
+  // Verificar que el evento pertenezca a un grupo del usuario
+  const event = await BirthdayEvent.findOne({
+    where: { id: birthdayEventId },
+    include: [
+      {
+        model: Group,
+        as: "group",
+        where: { userId },
+        required: true
+      }
+    ]
+  });
+
+  if (!event) {
+    const error = new Error("Pago no encontrado o no pertenece a un evento del usuario");
+    error.name = "NotFoundError";
+    throw error;
+  }
+
+  // Eliminar el pago
   await payment.destroy();
 };
 

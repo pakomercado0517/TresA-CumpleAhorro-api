@@ -5,6 +5,7 @@ import morgan from "morgan";
 import { env } from "./config/env.config";
 import { apiRateLimiter } from "./middlewares/rate-limit.middleware";
 import authRoutes from "./routes/auth.routes";
+import dashboardRoutes from "./routes/dashboard.routes";
 import eventRoutes from "./routes/event.routes";
 import groupRoutes from "./routes/group.routes";
 import memberRoutes from "./routes/member.routes";
@@ -31,6 +32,7 @@ app.get("/", (req, res) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api", dashboardRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api", memberRoutes);
 app.use("/api", eventRoutes);
