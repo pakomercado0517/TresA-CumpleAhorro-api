@@ -36,3 +36,4 @@ export interface GetDashboardQueryParams {
   includePhotoUrl?: boolean; // Incluir campo photoUrl (default: true)
 }
 
+
