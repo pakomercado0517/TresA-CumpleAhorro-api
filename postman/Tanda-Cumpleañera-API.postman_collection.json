@@ -122,6 +122,150 @@
       "description": "Endpoints de autenticación"
     },
     {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get User Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Obtiene el perfil del usuario autenticado, incluyendo nombre, email, estado de verificación y avatar."
+          },
+          "response": []
+        },
+        {
+          "name": "Update User Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Juan Pérez Actualizado\",\n  \"email\": \"juan.nuevo@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me"]
+            },
+            "description": "Actualiza el perfil del usuario (nombre y/o email). Al menos uno de los campos debe estar presente. Si se actualiza el email, el campo emailVerified se establecerá en false."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"Password123\",\n  \"newPassword\": \"NewPassword456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/me/password",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me", "password"]
+            },
+            "description": "Cambia la contraseña del usuario. Requiere la contraseña actual y la nueva contraseña. La nueva contraseña debe cumplir con los requisitos de seguridad (mínimo 8 caracteres, mayúscula, minúscula y número)."
+          },
+          "response": []
+        },
+        {
+          "name": "Change Avatar URL",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"avatarUrl\": \"https://example.com/avatars/user123.jpg\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/users/me/avatar",
+              "host": ["{{base_url}}"],
+              "path": ["api", "users", "me", "avatar"]
+            },
+            "description": "Actualiza la URL del avatar del usuario. Solo actualiza la URL, la subida del archivo debe manejarse por separado. Para eliminar el avatar, enviar una cadena vacía."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para gestionar el perfil del usuario autenticado"
+    },
+    {
+      "name": "Dashboard",
+      "item": [
+        {
+          "name": "Get Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/dashboard?limit=10&days=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "dashboard"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Límite de próximos cumpleaños (default: 10, max: 50)"
+                },
+                {
+                  "key": "days",
+                  "value": "30",
+                  "description": "Rango de días para próximos cumpleaños (default: 30, max: 365)"
+                },
+                {
+                  "key": "includePhotoUrl",
+                  "value": "true",
+                  "description": "Incluir campo photoUrl (default: true)"
+                }
+              ]
+            },
+            "description": "Obtiene información optimizada del dashboard del usuario, incluyendo resumen con estadísticas y lista de próximos cumpleaños."
+          },
+          "response": []
+        }
+      ],
+      "description": "Endpoints para obtener información del dashboard"
+    },
+    {
       "name": "Groups",
       "item": [
         {
@@ -263,6 +407,51 @@
       "name": "Members",
       "item": [
         {
+          "name": "List All Members",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/members?search=&month=&status=&limit=10&cursor=",
+              "host": ["{{base_url}}"],
+              "path": ["api", "members"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Buscar por nombre o teléfono",
+                  "disabled": true
+                },
+                {
+                  "key": "month",
+                  "value": "",
+                  "description": "Filtrar por mes de cumpleaños (1-12)",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filtrar por estado: active, pending, inactive",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Límite de resultados (default: 10)"
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "Cursor para paginación",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Lista todos los miembros del usuario autenticado con información completa, incluyendo nombre del grupo y estado. Soporta filtrado por búsqueda, mes, estado y paginación por cursor."
+          },
+          "response": []
+        },
+        {
           "name": "List Members",
           "event": [
             {
@@ -400,6 +589,55 @@
     {
       "name": "Events",
       "item": [
+        {
+          "name": "List All Events",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/events?year=2025&limit=10&cursor=&status=&search=&sortBy=birthdayDate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "events"],
+              "query": [
+                {
+                  "key": "year",
+                  "value": "2025",
+                  "description": "Filtrar por año (default: año actual)"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "description": "Límite de resultados (default: 10)"
+                },
+                {
+                  "key": "cursor",
+                  "value": "",
+                  "description": "Cursor para paginación",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "",
+                  "description": "Filtrar por estado: paid, pending, overdue",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "description": "Buscar por nombre de miembro o grupo",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "birthdayDate",
+                  "description": "Ordenar por: birthdayDate, createdAt (default: birthdayDate DESC)"
+                }
+              ]
+            },
+            "description": "Lista todos los eventos del usuario autenticado con información completa del grupo, miembro y pagos. Soporta filtrado por año, estado, búsqueda y paginación por cursor. Los resultados se ordenan por defecto en orden descendente (más recientes primero)."
+          },
+          "response": []
+        },
         {
           "name": "List Events",
           "event": [

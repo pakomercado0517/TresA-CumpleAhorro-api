@@ -78,6 +78,12 @@ export class User extends Model<User> {
   })
   declare passwordResetExpires: Date | null;
 
+  @Column({
+    type: DataType.STRING,
+    allowNull: true
+  })
+  declare avatarUrl: string | null;
+
   @CreatedAt
   declare createdAt: Date;
 

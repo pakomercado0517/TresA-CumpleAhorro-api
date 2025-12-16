@@ -10,6 +10,7 @@ import eventRoutes from "./routes/event.routes";
 import groupRoutes from "./routes/group.routes";
 import memberRoutes from "./routes/member.routes";
 import paymentRoutes from "./routes/payment.routes";
+import userRoutes from "./routes/user.routes";
 
 const app: Application = express();
 
@@ -33,6 +34,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api", dashboardRoutes);
+app.use("/api/users", userRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api", memberRoutes);
 app.use("/api", eventRoutes);
