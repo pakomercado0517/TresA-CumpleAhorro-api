@@ -10,6 +10,7 @@ import eventRoutes from "./routes/event.routes";
 import groupRoutes from "./routes/group.routes";
 import memberRoutes from "./routes/member.routes";
 import paymentRoutes from "./routes/payment.routes";
+import publicRoutes from "./routes/public.routes";
 import userRoutes from "./routes/user.routes";
 
 const app: Application = express();
@@ -32,6 +33,10 @@ app.get("/", (req, res) => {
   res.send({ message: "API Tanda Cumpleaños funcionando correctamente" });
 });
 
+// Rutas públicas (sin autenticación)
+app.use("/api/public", publicRoutes);
+
+// Rutas protegidas (requieren autenticación)
 app.use("/api/auth", authRoutes);
 app.use("/api", dashboardRoutes);
 app.use("/api/users", userRoutes);
