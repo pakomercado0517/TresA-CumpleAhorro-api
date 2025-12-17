@@ -15,6 +15,12 @@ import userRoutes from "./routes/user.routes";
 
 const app: Application = express();
 
+// Configurar trust proxy para producción (necesario cuando hay un proxy/load balancer)
+// Esto permite que express-rate-limit identifique correctamente las IPs de los clientes
+if (env.NODE_ENV === "production") {
+  app.set("trust proxy", true);
+}
+
 // Middlewares globales
 app.use(morgan("dev"));
 app.use(express.json());
