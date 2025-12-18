@@ -71,3 +71,6 @@ export const validateChangeAvatar = [
     .withMessage("La URL del avatar no puede exceder 500 caracteres")
 ];
 
+
+
+

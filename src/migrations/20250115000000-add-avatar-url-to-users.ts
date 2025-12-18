@@ -13,3 +13,6 @@ export async function down(queryInterface: QueryInterface): Promise<void> {
   await queryInterface.removeColumn("Users", "avatarUrl");
 }
 
+
+
+

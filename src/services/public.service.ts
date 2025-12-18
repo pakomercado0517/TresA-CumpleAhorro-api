@@ -185,3 +185,6 @@ export const getPublicEventById = async (
   return response;
 };
 
+
+
+
